@@ -59,6 +59,12 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let nestedDelegation =\n    let offset = 2<m>\n' +
     '    let projected = Seq.collect (fun (value: int<m>) -> seq { yield value + offset }) (seq { yield 1<m> })\n' +
     '    Seq.append (seq { yield! projected }) (seq { yield offset })\n' +
+    'let loopingSequence =\n    let mutable stepValue = 1<m>\n    seq {\n' +
+    '        while stepValue < 3<m> do\n            if stepValue > 0<m> then yield stepValue\n' +
+    '            stepValue <- stepValue + 1<m>\n    }\n' +
+    'let deferredSequence =\n    let evaluationSeed = 4<m>\n    seq {\n' +
+    '        let sample = fun () -> evaluationSeed\n        let delayedValue = lazy (evaluationSeed)\n' +
+    '        yield sample ()\n        yield Lazy.force delayedValue\n    }\n' +
     'let rangeLoop =\n    for index in (-2 .. 2) do ignore index\n    ()\n' +
     'let loopCapture =\n    for index = 1 to 2 do\n        let visit = fun (value: int) -> ignore (index + value)\n        visit 0\n    ()\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
@@ -70,6 +76,7 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
         'ignore nativeSequence; ignore nestedSequence; ignore capturedSequence; ' +
         'ignore mappedSequence; ignore collectedSequence; ignore guardedSequence; ignore effectOnlySequence; ' +
         'ignore effectfulDelegation; ignore nestedDelegation; ' +
+        'ignore loopingSequence; ignore deferredSequence; ' +
         'ignore rangeLoop; ignore loopCapture');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
@@ -383,6 +390,48 @@ async function run() {
         }
         return { version, results, effectful, nested, operand, composed, captures };
     };
+    const sequenceEvaluationHovers = async () => {
+        const lines = valid.split('\n');
+        const at = (marker, token) => {
+            const line = lines.findIndex(text => text.includes(marker));
+            assert.ok(line >= 0, marker);
+            const character = lines[line].indexOf(token);
+            assert.ok(character >= 0, token);
+            return { line, character };
+        };
+        const hoverAt = (marker, token) => connection.sendRequest('textDocument/hover', {
+            textDocument: { uri }, position: at(marker, token)
+        });
+        const results = [];
+        for (const binding of ['loopingSequence', 'deferredSequence']) {
+            const result = await hover(binding);
+            assert.equal(result?.contents.value.split('\n')[0], binding + ': seq<int<m>>');
+            results.push({ binding, result });
+        }
+        const loop = await hoverAt('while stepValue', 'while');
+        assert.equal(loop?.contents.value.split('\n')[0], 'unit');
+        const declaredSample = await hoverAt('let sample', 'sample');
+        const calledSample = await hoverAt('yield sample', 'sample');
+        assert.equal(declaredSample?.contents.value.split('\n')[0], 'sample: unit -> int<m>');
+        assert.equal(calledSample?.contents.value.split('\n')[0], 'sample: unit -> int<m>');
+        const captures = [];
+        for (const [token, declarationMarker, uses] of [
+            ['stepValue', 'let mutable stepValue', ['while stepValue', 'if stepValue']],
+            ['evaluationSeed', 'let evaluationSeed', ['let sample', 'let delayedValue']]
+        ]) {
+            const declaration = await hoverAt(declarationMarker, token);
+            for (const marker of uses) {
+                const result = await hoverAt(marker, token);
+                assert.equal(result?.contents.value.split('\n')[0], token + ': int<m>');
+                const definition = await connection.sendRequest('textDocument/definition', {
+                    textDocument: { uri }, position: at(marker, token)
+                });
+                assert.deepEqual(definition, { uri, range: declaration.range });
+                captures.push({ token, marker, result, definition });
+            }
+        }
+        return { version, results, loop, declaredSample, calledSample, captures };
+    };
     const loopCaptureHovers = async () => {
         const lines = valid.split('\n');
         const hoverAt = async (marker, name, reference) => {
@@ -547,6 +596,7 @@ async function run() {
         evidence.sequenceOwnership = await sequenceOwnershipHovers();
         evidence.sequenceOwnershipRepairs = [];
         evidence.delegation = await delegationHovers();
+        evidence.sequenceEvaluation = await sequenceEvaluationHovers();
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');
             const finish = markedBody.indexOf('»');
