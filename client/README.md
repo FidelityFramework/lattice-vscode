@@ -100,6 +100,10 @@ receives the error payload, with both Result arguments visible in its partial
 signature; `Result.iter` returns unit after a measured action.
 Fallback/callback dimension errors and nonunit actions retain exact CCS8040 or
 CCS8003 spans; repair restores the corresponding Result projection.
+`Result.isOk` and `isError` return `bool`; typed predicate aliases retain both
+independent measured Result payload types.
+Payload mismatch and predicate overapplication require exact CCS8040/CCS8003
+application spans; repairs restore both bool results and typed alias signatures.
 Simple parenthesized integer ranges retain unit results and `int` induction
 hovers. Floating, Boolean and measured bounds require the compiler's exact
 CCS8003/CCS8040 loop spans.

@@ -37,6 +37,8 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let resultDefaulted = Result.defaultValue<int<m>, int<s>> 1<m> (Error 2<s>)\n' +
     'let resultRecover = Result.defaultWith<int<m>, int<s>> (fun error -> error * 1<m> / 1<s>)\nlet resultRecovered = resultRecover (Error 2<s>)\n' +
     'let resultIterated = Result.iter<int<m>, int<s>> (fun value -> ignore value) (Ok 2<m>)\n' +
+    'let resultIsOkPredicate = Result.isOk<int<m>, int<s>>\nlet resultIsOk = resultIsOkPredicate (Ok 1<m>)\n' +
+    'let resultIsErrorPredicate = Result.isError<int<s>, int<m>>\nlet resultIsError = resultIsErrorPredicate (Error 2<m>)\n' +
     'let nativeSequence = seq { yield 1<m> }\n' +
     'let nestedSequence = seq {\n    let inner = seq { yield true }\n    yield 1<m>\n}\n' +
     'let rangeLoop =\n    for index in (-2 .. 2) do ignore index\n    ()\n' +
@@ -46,7 +48,8 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
         'ignore iterationResult; ignore iterationPartial; ignore iterationBare; ignore iterationBareSeconds; ' +
         'ignore folded; ignore foldedBack; ignore foldBare; ignore foldBackBare; ' +
         'ignore resultMapped; ignore resultErrorMapped; ignore resultBound; ' +
-        'ignore resultDefaulted; ignore resultRecovered; ignore resultIterated; ignore nativeSequence; ignore nestedSequence; ignore rangeLoop; ignore loopCapture');
+        'ignore resultDefaulted; ignore resultRecovered; ignore resultIterated; ignore resultIsOk; ignore resultIsError; ' +
+        'ignore nativeSequence; ignore nestedSequence; ignore rangeLoop; ignore loopCapture');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
 const directCaptures = `module DirectCaptures
@@ -96,6 +99,8 @@ const cases = [
     ['Result.defaultValue fallback dimension', 'CCS8040', 'let selected = «Result.defaultValue 1<m> (Ok 2<s>: Result<int<s>, bool>)»'],
     ['Result.defaultWith error callback dimension', 'CCS8040', 'let selected = «Result.defaultWith (fun (_: int<s>) -> 1<m>) (Error 2<m>: Result<int<m>, int<m>>)»'],
     ['Result.iter nonunit action', 'CCS8003', 'let selected = «Result.iter (fun (_: bool) -> 3)» (Ok true: Result<bool, bool>)'],
+    ['Result.isOk payload dimension', 'CCS8040', 'let selected = «Result.isOk<int<m>, bool> (Ok 3<s>)»'],
+    ['Result.isError overapplication', 'CCS8003', 'let selected = «Result.isError (Error (): Result<int<m>, unit>) true»'],
     ['range loop floating bound', 'CCS8003', 'let selected =\n    «for index in 0.0 .. 1 do ignore index»\n    ()'],
     ['range loop Boolean bound', 'CCS8003', 'let selected =\n    «for index in true .. 1 do ignore index»\n    ()'],
     ['range loop measured bound', 'CCS8040', 'let selected =\n    «for index in 1<m> .. 3 do ignore index»\n    ()'],
@@ -321,7 +326,10 @@ async function run() {
             ['resultBound', 'Result<int<kg>, int<s>>'],
             ['resultMapPartial', 'Result<int<m>, int<s>> -> Result<int<kg>, int<s>>'],
             ['resultDefaulted', 'int<m>'], ['resultRecovered', 'int<m>'], ['resultIterated', 'unit'],
-            ['resultRecover', 'Result<int<m>, int<s>> -> int<m>']
+            ['resultRecover', 'Result<int<m>, int<s>> -> int<m>'],
+            ['resultIsOk', 'bool'], ['resultIsError', 'bool'],
+            ['resultIsOkPredicate', 'Result<int<m>, int<s>> -> bool'],
+            ['resultIsErrorPredicate', 'Result<int<s>, int<m>> -> bool']
         ]) {
             const result = await hover(name);
             assert.equal(result?.contents.value.split('\n')[0], name + ': ' + type);
@@ -382,15 +390,21 @@ async function run() {
                 evidence.ceRepairs.push({ name, version, result });
             }
             if (name.startsWith('Sequence ')) evidence.sequenceRepairs.push(await nestedSequenceHovers());
-            if (name.startsWith('Result.default') || name.startsWith('Result.iter')) {
+            if (name.startsWith('Result.default') || name.startsWith('Result.iter') || name.startsWith('Result.is')) {
                 const operation = name.split(' ')[0];
                 const [binding, type] = {
                     'Result.defaultValue': ['resultDefaulted', 'int<m>'],
                     'Result.defaultWith': ['resultRecover', 'Result<int<m>, int<s>> -> int<m>'],
-                    'Result.iter': ['resultIterated', 'unit']
+                    'Result.iter': ['resultIterated', 'unit'],
+                    'Result.isOk': ['resultIsOkPredicate', 'Result<int<m>, int<s>> -> bool'],
+                    'Result.isError': ['resultIsErrorPredicate', 'Result<int<s>, int<m>> -> bool']
                 }[operation];
                 assert.equal((await hover(binding))?.contents.value.split('\n')[0], binding + ': ' + type,
                     operation + ': unsaved repair restores the Result projection');
+                if (operation.startsWith('Result.is')) {
+                    const resultBinding = operation === 'Result.isOk' ? 'resultIsOk' : 'resultIsError';
+                    assert.equal((await hover(resultBinding))?.contents.value.split('\n')[0], resultBinding + ': bool');
+                }
             }
             if (name.startsWith('immutable loop')) {
                 assert.match(errors[0].message, /not found or not mutable/);
