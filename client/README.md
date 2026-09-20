@@ -136,6 +136,10 @@ mutable reads navigate to their source storage declarations. Ordinary lambda and
 lazy bodies cannot inherit an enclosing yield owner: exact CCS8401 spans and
 unsaved repairs are checked through the server. CCS tests own raw suspension-edge
 assertions; these client checks observe public projections without a new API.
+Effectful delegation operands and nested `Seq.append`/`collect` retain measured
+sequence hovers and original capture definitions. The elaborated `yield!` source
+still has its exact range and a unit-valued hover. Generated loop structure belongs
+to CCS graph tests; the editor gate makes no guarded-execution or exhaustion claim.
 The retained script name also covers direct immutable captures: declaration and
 reference hovers preserve the exact source arity, dimensions and returned-function
 result, with a captureless control. A wrong explicit argument requires CCS8040 at
