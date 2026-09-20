@@ -3,6 +3,27 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
+			"name": "Lattice: HelloDimensionsProof",
+			"type": "extensionHost",
+			"request": "launch",
+			"runtimeExecutable": "${execPath}",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}/client",
+				"--extensionDevelopmentPath=${workspaceFolder}/client/.demo-extensions/tamasfe.even-better-toml-0.21.2",
+				"${workspaceFolder}/client/.demo",
+				"--goto", "${workspaceFolder}/client/.demo/Main.clef"
+			],
+			"preLaunchTask": "Prepare Clef demo"
+		},
+		{
+			"name": "Lattice: Run Clef client locally",
+			"type": "extensionHost",
+			"request": "launch",
+			"runtimeExecutable": "${execPath}",
+			"args": ["--extensionDevelopmentPath=${workspaceFolder}/client"],
+			"preLaunchTask": "Prepare Clef client"
+		},
+		{
 			"preLaunchTask": "Extension Build",
 			"name": "Build and Launch Extension",
 			"type": "extensionHost",

@@ -6,6 +6,56 @@
     "type": "shell",
     "tasks": [
         {
+            "label": "Prepare Clef demo",
+            "dependsOrder": "sequence",
+            "dependsOn": ["Build Lattice server", "Prepare Clef client", "Prepare Clef icons", "Prepare TOML support", "Copy Clef demo"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Prepare Clef icons",
+            "type": "process",
+            "command": "npm",
+            "windows": { "command": "npm.cmd" },
+            "args": ["run", "prepare:icons", "--", "--code", "${execPath}"],
+            "options": { "cwd": "${workspaceFolder}/client" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Prepare TOML support",
+            "type": "process",
+            "command": "npm",
+            "windows": { "command": "npm.cmd" },
+            "args": ["run", "prepare:toml", "--", "--code", "${execPath}"],
+            "options": { "cwd": "${workspaceFolder}/client" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build Lattice server",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["build", "src/Lattice.Server/Lattice.Server.fsproj", "--nologo"],
+            "options": { "cwd": "${workspaceFolder}/../Composer" },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Copy Clef demo",
+            "type": "process",
+            "command": "npm",
+            "windows": { "command": "npm.cmd" },
+            "args": ["run", "prepare:demo"],
+            "options": { "cwd": "${workspaceFolder}/client" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Prepare Clef client",
+            "type": "process",
+            "command": "npm",
+            "windows": { "command": "npm.cmd" },
+            "args": ["run", "prepare:grammar"],
+            "options": { "cwd": "${workspaceFolder}/client" },
+            "problemMatcher": []
+        },
+        {
             "command": "${workspaceRoot}/build.sh",
             "type": "shell",
             "windows": {

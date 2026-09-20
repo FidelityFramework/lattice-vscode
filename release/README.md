@@ -1,134 +1,54 @@
-# Ionide for F# (Native)
+# Lattice for Visual Studio Code
 
-**F# Native Language Support for Visual Studio Code**
+The retained release entry point from the
+[Ionide for F#](https://github.com/ionide/ionide-vscode-fsharp) fork.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
+## Status
 
-A fork of [Ionide-VSCode](https://github.com/ionide/ionide-vscode-fsharp) enhanced for native F# development with the Fidelity framework.
+This is the inherited release entry point. The [local Clef development client](../client/README.md)
+has its own manifest and F5 setup; it does not load this extension or require Marketplace publication.
 
-## Overview
+This extension retains the inherited F# language-service path and bundles
+upstream FsAutoComplete. It registers `.fs`, `.fsi`, `.fsx` and `.fsnx` as F#.
+The `.fidproj` activation and TOML association are present, but native Clef project
+loading, dimensional/range views and proof tooling are not implemented by those
+associations.
 
-Ionide for F# (Native) provides rich IDE support for native F# compilation, powered by [FsNativeAutoComplete (FSNAC)](https://github.com/FidelityFramework/FsNativeAutoComplete).
+The separate development client connects to the .NET-hosted Lattice server that consumes CCS.
+The server's .NET host is separate from the native or freestanding target of a
+Clef program. The existing `LanguageClient` and process plumbing provide a starting
+point; the inherited FSAC workspace requests and launch arguments need to be aligned
+with the selected server if reused. The `clef` language ID and `lattice.*`
+settings/command namespace are implemented in the separate development client;
+they are not setup instructions for this inherited release.
 
-While the original Ionide extension assumes .NET projects with `.fsproj` and NuGet packages, Ionide.FsNative understands:
+## Active client validation
 
-- **`.fidproj`** - Native F# project manifests (TOML format)
-- **`.fsnx`** - Native F# script files
-- **Native type semantics** - UTF-8 strings, value-type options, platform words
+The active client has passed real-server dimensional hover, diagnostic, definition
+and unsaved-repair gates. CCS owns ordered project inputs and source semantics;
+the server associates responses with the checked version. Its read-only startup
+query projects PSG initializer order, source identities and pending native facts.
+The [C-07 evidence record](https://github.com/FidelityFramework/Composer/blob/main/docs/Language_Coverage_Waypoints.md)
+records the exact source, native and editor artifacts separately, including the
+remaining language acceptance gaps. None of these results claims that this
+inherited release extension implements the active Clef path.
 
-## Requirements
+Proof views follow the compiler's query and result contracts. An obligation's
+presence does not mean it has been discharged. The editor presents evidence and
+premises supplied by the shared service; it does not decide proof outcomes.
 
-- .NET SDK 9.0+ (for FSNAC with FNCS support)
-- VS Code 1.52+
+The [Lattice integration plan](https://github.com/FidelityFramework/Composer/blob/main/docs/Lattice_Integration.md)
+tracks this work. The [repository README](https://github.com/FidelityFramework/lattice-vscode/blob/fidelity/README.md)
+links the current launch implementation, build manifests and helper dependency
+alignment needed if this inherited extension is reused. There is no published
+Lattice server package or validated Marketplace release. The recorded real F5
+gate uses the `client/` workspace; root-workspace launch configurations have only
+static configuration validation. Mixed-extension coexistence is limited to the
+tested client cases.
 
-## Installation
+## Heritage and license
 
-### From VSIX (Development)
+Lattice builds on the work of Krzysztof Cieślak and the Ionide community. Their
+contribution and upstream attribution remain part of this fork.
 
-```bash
-# Build the extension
-./build.sh
-
-# Install the generated .vsix file
-code --install-extension release/ionide-fsnative-*.vsix
-```
-
-### From Marketplace (Coming Soon)
-
-Search for "Ionide for F# (Native)" in the VS Code Extensions marketplace.
-
-## Features
-
-### Standard F# Development
-
-All features from Ionide work as expected for `.fsproj` projects:
-- Syntax highlighting
-- Auto completions
-- Error highlighting and quick fixes
-- Tooltips with type information
-- Method parameter hints
-- Go to Definition / Peek Definition
-- Find all references
-- Rename refactoring
-- Document symbols
-- Code formatting (Fantomas)
-- F# Interactive integration
-- Solution Explorer
-- MSBuild integration
-
-### Native F# Development
-
-Additional features for `.fidproj` projects:
-- **Native type display** - See UTF-8 string layout, voption semantics
-- **SRTP resolution** - View resolved trait implementations
-- **Platform bindings** - Understand which functions map to syscalls
-- **FS8xxx diagnostics** - Native-specific error codes
-
-## Project Files
-
-### Standard (.fsproj)
-
-Works exactly like Ionide - MSBuild project files with NuGet dependencies.
-
-### Native (.fidproj)
-
-TOML-based project manifests for native compilation:
-
-```toml
-[package]
-name = "my_project"
-
-[dependencies]
-alloy = { path = "../alloy/src" }
-
-[build]
-sources = ["Program.fs"]
-output = "my_project"
-output_kind = "console"
-```
-
-## The Fidelity Ecosystem
-
-| Project | Role |
-|---------|------|
-| [Firefly](https://github.com/FidelityFramework/Firefly) | AOT compiler |
-| [FSNAC](https://github.com/FidelityFramework/FsNativeAutoComplete) | Language server |
-| **Ionide.FsNative-VSCode** | This extension |
-| [Ionide.FsNative-Vim](https://github.com/FidelityFramework/Ionide-vim-fsnative) | Vim/Neovim plugin |
-| [Alloy](https://github.com/FidelityFramework/Alloy) | Native standard library |
-
-## Coexistence with Ionide
-
-Ionide.FsNative can be installed alongside Ionide:
-- Different extension IDs and configuration namespaces
-- Ionide.FsNative handles `.fidproj`/`.fsnx`, Ionide doesn't recognize them
-- Use Ionide for pure .NET, Ionide.FsNative for native or mixed workspaces
-
-## Building
-
-```bash
-# Restore tools
-dotnet tool restore
-
-# Build
-./build.sh
-```
-
-## Contributing
-
-Contributions are welcome! Areas of interest:
-- Testing with Fidelity projects
-- FSNAC integration improvements
-- Documentation and examples
-
-## Acknowledgments
-
-This project is a fork of [Ionide-VSCode](https://github.com/ionide/ionide-vscode-fsharp). We're grateful to the Ionide maintainers and the F# community for creating the foundation we build upon.
-
-## License
-
-MIT License - see [LICENSE.md](LICENSE.md)
-
----
-
-*Native F# development, familiar IDE experience.*
+MIT License — see [LICENSE.md](LICENSE.md).
