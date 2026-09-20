@@ -130,6 +130,12 @@ generated operand snapshots, and captured callback references navigate to the
 original measured declaration. Callback/delegation dimension errors require
 exact CCS8040 spans; repairs restore these projections through the actual server.
 This checks source/editor parity without claiming sequence execution.
+Ownership cases cover nested sequences, guarded effects, delegation and an
+effectful body with no yield. Hovers retain independent owner types, and captured
+mutable reads navigate to their source storage declarations. Ordinary lambda and
+lazy bodies cannot inherit an enclosing yield owner: exact CCS8401 spans and
+unsaved repairs are checked through the server. CCS tests own raw suspension-edge
+assertions; these client checks observe public projections without a new API.
 The retained script name also covers direct immutable captures: declaration and
 reference hovers preserve the exact source arity, dimensions and returned-function
 result, with a captureless control. A wrong explicit argument requires CCS8040 at

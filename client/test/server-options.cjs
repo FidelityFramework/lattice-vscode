@@ -48,6 +48,12 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let collectedSequence =\n    let tail = seq { yield 3<s> }\n    let values = seq { yield 1<m> }\n' +
     '    let collected = Seq.collect (fun (_: int<m>) -> seq { yield 2<s> }) values\n' +
     '    Seq.append collected tail\n' +
+    'let guardedSequence =\n    let mutable observed = 1<m>\n    seq {\n' +
+    '        let guardedInner = seq { yield true }\n        observed <- observed + 1<m>\n' +
+    '        if observed > 0<m> then\n            yield observed\n' +
+    '        let delegated = seq { yield observed }\n        yield! delegated\n    }\n' +
+    'let effectOnlySequence =\n    let mutable touched = false\n' +
+    '    let empty: seq<unit> = seq { touched <- not touched }\n    empty\n' +
     'let rangeLoop =\n    for index in (-2 .. 2) do ignore index\n    ()\n' +
     'let loopCapture =\n    for index = 1 to 2 do\n        let visit = fun (value: int) -> ignore (index + value)\n        visit 0\n    ()\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
@@ -57,7 +63,8 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
         'ignore resultMapped; ignore resultErrorMapped; ignore resultBound; ' +
         'ignore resultDefaulted; ignore resultRecovered; ignore resultIterated; ignore resultIsOk; ignore resultIsError; ' +
         'ignore nativeSequence; ignore nestedSequence; ignore capturedSequence; ' +
-        'ignore mappedSequence; ignore collectedSequence; ignore rangeLoop; ignore loopCapture');
+        'ignore mappedSequence; ignore collectedSequence; ignore guardedSequence; ignore effectOnlySequence; ' +
+        'ignore rangeLoop; ignore loopCapture');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
 const directCaptures = `module DirectCaptures
@@ -117,6 +124,7 @@ const cases = [
     ['CE custom builder', 'CCS8401', 'let builder value = value\nlet selected = builder «{\n    return true\n}»'],
     ['CE seq let bang', 'CCS8401', 'let selected = seq {\n    «let! value = true\n    yield value»\n}'],
     ['CE seq lambda yield', 'CCS8401', 'let selected = seq {\n    let work = fun () -> «yield 1»\n    yield 2\n}'],
+    ['CE seq lazy yield', 'CCS8401', 'let selected = seq {\n    let work = lazy («yield 1»)\n    yield 2\n}'],
     ['CE lexical seq', 'CCS8401', 'let seq value = not value\nlet selected = seq «{ yield true }»'],
     ['Sequence mixed yield dimensions', 'CCS8040', 'let selected = seq { yield 1<m>; «yield 2<s>» }'],
     ['Sequence scalar delegation', 'CCS8003', 'let selected = seq { «yield! 1» }'],
@@ -277,6 +285,52 @@ async function run() {
             captures.push({ operation, result, definition });
         }
         return { version, results, applications, declaration, captures };
+    };
+    const sequenceOwnershipHovers = async () => {
+        const lines = valid.split('\n');
+        const at = (marker, token, last = false) => {
+            const line = lines.findIndex(text => text.includes(marker));
+            assert.ok(line >= 0, marker);
+            const character = last ? lines[line].lastIndexOf(token) : lines[line].indexOf(token);
+            assert.ok(character >= 0, token);
+            return { line, character };
+        };
+        const hoverAt = (marker, token, last = false) => connection.sendRequest('textDocument/hover', {
+            textDocument: { uri }, position: at(marker, token, last)
+        });
+        const results = [];
+        for (const [binding, type] of [
+            ['guardedSequence', 'seq<int<m>>'], ['guardedInner', 'seq<bool>'],
+            ['delegated', 'seq<int<m>>'], ['effectOnlySequence', 'seq<unit>']
+        ]) {
+            const result = await hover(binding);
+            assert.equal(result?.contents.value.split('\n')[0], binding + ': ' + type);
+            results.push({ binding, result });
+        }
+        const delegated = await hoverAt('yield! delegated', 'delegated');
+        assert.equal(delegated?.contents.value.split('\n')[0], 'delegated: seq<int<m>>');
+        const empty = await hoverAt('let empty', 'seq {');
+        assert.equal(empty?.contents.value.split('\n')[0], 'seq<unit>');
+        const captures = [];
+        for (const [token, type, uses] of [
+            ['observed', 'int<m>', ['if observed', 'yield observed', 'let delegated']],
+            ['touched', 'bool', ['let empty']]
+        ]) {
+            const declaration = await hoverAt('let mutable ' + token, token);
+            const start = at('let mutable ' + token, token);
+            assert.equal(declaration?.contents.value.split('\n')[0], token + ': ' + type);
+            assert.deepEqual(declaration.range, { start, end: { line: start.line, character: start.character + token.length } });
+            for (const marker of uses) {
+                const result = await hoverAt(marker, token, true);
+                assert.equal(result?.contents.value.split('\n')[0], token + ': ' + type);
+                const definition = await connection.sendRequest('textDocument/definition', {
+                    textDocument: { uri }, position: at(marker, token, true)
+                });
+                assert.deepEqual(definition, { uri, range: declaration.range });
+                captures.push({ token, marker, result, definition });
+            }
+        }
+        return { version, results, delegated, empty, captures };
     };
     const loopCaptureHovers = async () => {
         const lines = valid.split('\n');
@@ -439,6 +493,8 @@ async function run() {
         evidence.sequenceRepairs = [];
         evidence.sequenceProducers = await sequenceProducerHovers();
         evidence.sequenceProducerRepairs = [];
+        evidence.sequenceOwnership = await sequenceOwnershipHovers();
+        evidence.sequenceOwnershipRepairs = [];
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');
             const finish = markedBody.indexOf('»');
@@ -475,6 +531,8 @@ async function run() {
                 const result = await hover(binding);
                 assert.equal(result?.contents.value.split('\n')[0], binding + ': ' + type);
                 evidence.ceRepairs.push({ name, version, result });
+                if (name === 'CE seq lambda yield' || name === 'CE seq lazy yield')
+                    evidence.sequenceOwnershipRepairs.push(await sequenceOwnershipHovers());
             }
             if (name.startsWith('Sequence ')) evidence.sequenceRepairs.push(await nestedSequenceHovers());
             if (name.startsWith('Seq producer ')) evidence.sequenceProducerRepairs.push(await sequenceProducerHovers());
