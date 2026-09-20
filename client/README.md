@@ -83,6 +83,11 @@ The Node tests cover registration, lifecycle, cancellation and proof rendering, 
 
 `test:options` uses the already built Lattice server over stdio to check measured
 `Option.defaultValue` and `Option.defaultWith` results and stored-partial hover.
+The retained script name also covers direct immutable captures: declaration and
+reference hovers preserve the exact source arity, dimensions and returned-function
+result, with a captureless control. A wrong explicit argument requires CCS8040 at
+the original call span; unsaved repair restores all seven callable/result projection
+checks and resolves the captured variable back to its original declaration.
 Unsaved negative cases must preserve CCS's effective error severity, exact source
 span and existing codes (`CCS8003`, `CCS8004`, `CCS8040`, `CCS8041`, `CCS8048`);
 corrections must clear the error at the new document version. It records all server

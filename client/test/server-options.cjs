@@ -16,6 +16,22 @@ const entry = '\n[<EntryPoint>]\nlet main _ = ignore selected; 0\n';
 const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = choose (Some 2<m>)\n' +
     'let delayedChoose = Option.defaultWith (fun () -> 3<m>)\nlet delayed = delayedChoose None\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed');
+// Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
+// capture parameters must never appear in source declaration/reference hover.
+const directCaptures = `module DirectCaptures
+[<Measure>] type m
+[<Measure>] type s
+[<EntryPoint>]
+let main _ =
+    let offset = 7<m>
+    let shift (value: int<m>) = offset + value
+    let plain (value: int<m>) = value
+    let make () = fun (value: int<m>) -> offset + value
+    let shifted = shift 3<m>
+    let unchanged = plain 10<m>
+    let produced = make () 3<m>
+    if shifted = unchanged && produced = 10<m> then 0 else 1
+`;
 const cases = [
     ['defaultValue dimensions', 'CCS8040', 'let selected = «Option.defaultValue 1<m> (Some 2<s>)»'],
     ['defaultValue stored partial', 'CCS8040', 'let choose = Option.defaultValue 1<m>\nlet selected = «choose (Some 2<s>)»'],
@@ -42,13 +58,13 @@ async function run() {
     fs.accessSync(server);
     const assemblies = Object.fromEntries(fs.readdirSync(path.dirname(server))
         .filter(name => name.endsWith('.dll')).map(name => [name, hash(path.join(path.dirname(server), name))]));
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lattice-option-waypoint-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lattice-surface-waypoint-'));
     const file = path.join(root, 'Main.clef');
-    const project = path.join(root, 'OptionWaypoint.fidproj');
+    const project = path.join(root, 'SurfaceWaypoint.fidproj');
     fs.writeFileSync(file, valid);
-    fs.writeFileSync(project, '[package]\nname = "OptionWaypoint"\n[compilation]\ntarget = "library"\n' +
+    fs.writeFileSync(project, '[package]\nname = "SurfaceWaypoint"\n[compilation]\ntarget = "library"\n' +
         '[build]\nsources = ["Main.clef"]\noutput_kind = "library"\n');
-    console.log('Option editor waypoint evidence: ' + root);
+    console.log('Option and direct-capture editor evidence: ' + root);
     const log = fs.openSync(path.join(root, 'server.log'), 'w');
     const child = spawn(process.env.LATTICE_DOTNET ?? 'dotnet', [server, '--project', project],
         { stdio: ['pipe', 'pipe', log] });
@@ -56,7 +72,7 @@ async function run() {
     const connection = createMessageConnection(child.stdout, child.stdin);
     const notifications = [];
     const evidence = { server, assemblies, node: process.version,
-        scope: 'Real CCS hover and diagnostics through LSP; no completion, native execution or proof-discharge claim.',
+        scope: 'Option and direct immutable capture source projections through real CCS/LSP; no completion, native execution or proof-discharge claim.',
         cases: [], notifications };
     let failure;
     child.on('error', error => { failure = error; });
@@ -68,7 +84,7 @@ async function run() {
     const uri = pathToFileURL(file).href;
     let version = 1;
     const timeout = setTimeout(() => {
-        failure = new Error('Option LSP gate exceeded 90 seconds.');
+        failure = new Error('Compiler surface LSP gate exceeded 90 seconds.');
         connection.dispose();
         child.kill('SIGKILL');
     }, 90000);
@@ -93,6 +109,52 @@ async function run() {
     const hover = name => connection.sendRequest('textDocument/hover', {
         textDocument: { uri }, position: position(valid.slice(0, valid.indexOf('let ' + name + ' =') + 5))
     });
+    const captureHovers = async () => {
+        const lines = directCaptures.split('\n');
+        const checks = [];
+        for (const [name, type, declaration, reference] of [
+            ['shift', 'int<m> -> int<m>', 'let shift', 'let shifted = shift'],
+            ['plain', 'int<m> -> int<m>', 'let plain', 'let unchanged = plain'],
+            ['make', 'unit -> int<m> -> int<m>', 'let make', 'let produced = make']
+        ]) {
+            for (const [site, marker] of [['declaration', declaration], ['reference', reference]]) {
+                const line = lines.findIndex(text => text.includes(marker));
+                assert.ok(line >= 0, marker);
+                const character = site === 'reference' ? lines[line].lastIndexOf(name) : lines[line].indexOf(name);
+                const result = await connection.sendRequest('textDocument/hover', {
+                    textDocument: { uri }, position: { line, character }
+                });
+                assert.equal(result?.contents.value.split('\n')[0], name + ': ' + type,
+                    name + ' ' + site + ': original source arity and dimensions');
+                checks.push({ name, site, version, result });
+            }
+        }
+        const line = lines.findIndex(text => text.includes('let produced'));
+        const result = await connection.sendRequest('textDocument/hover', {
+            textDocument: { uri }, position: { line, character: lines[line].indexOf('produced') }
+        });
+        assert.equal(result?.contents.value.split('\n')[0], 'produced: int<m>');
+        checks.push({ name: 'produced', site: 'result', version, result });
+        const declarationLine = lines.findIndex(text => text.includes('let offset'));
+        const declaration = await connection.sendRequest('textDocument/hover', {
+            textDocument: { uri }, position: { line: declarationLine, character: lines[declarationLine].indexOf('offset') }
+        });
+        assert.equal(declaration?.contents.value.split('\n')[0], 'offset: int<m>');
+        assert.equal(declaration.range.start.line, declarationLine);
+        const captureLine = lines.findIndex(text => text.includes('let shift'));
+        const capturedPosition = { line: captureLine, character: lines[captureLine].lastIndexOf('offset') };
+        const captured = await connection.sendRequest('textDocument/hover', {
+            textDocument: { uri }, position: capturedPosition
+        });
+        assert.equal(captured?.contents.value.split('\n')[0], 'offset: int<m>');
+        const definition = await connection.sendRequest('textDocument/definition', {
+            textDocument: { uri }, position: capturedPosition
+        });
+        assert.deepEqual(definition, { uri, range: declaration.range },
+            'A captured reference resolves to the original source binding, not its generated formal.');
+        checks.push({ name: 'offset', site: 'captured reference', version, result: captured, definition });
+        return checks;
+    };
     try {
         const initialized = await connection.sendRequest('initialize', {
             processId: process.pid, rootUri: pathToFileURL(root).href, capabilities: {}
@@ -133,6 +195,23 @@ async function run() {
                 name + ': unsaved correction restores the measured hover');
             console.log('PASS: ' + name + ' and unsaved correction');
         }
+        noErrors(await change(directCaptures));
+        evidence.directCaptures = { source: directCaptures, hovers: await captureHovers() };
+        const marked = directCaptures.replace('shift 3<m>', '«shift 3<s>»');
+        const prefix = marked.slice(0, marked.indexOf('«'));
+        const span = marked.slice(marked.indexOf('«') + 1, marked.indexOf('»'));
+        const source = marked.replace('«', '').replace('»', '');
+        const publication = await change(source);
+        const errors = publication.diagnostics.filter(row => row.severity === 1);
+        assert.equal(errors.length, 1, 'direct capture explicit argument: one effective compiler error');
+        assert.equal(errors[0].source, 'CCS');
+        assert.equal(errors[0].code, 'CCS8040');
+        assert.deepEqual(errors[0].range, { start: position(prefix), end: position(prefix + span) });
+        evidence.cases.push({ name: 'direct capture explicit argument dimension', version, source, diagnostic: errors[0] });
+        noErrors(await change(directCaptures));
+        evidence.directCaptures.repairedHovers = await captureHovers();
+        console.log('PASS: direct-capture source signatures, explicit argument rejection and unsaved correction');
+        noErrors(await change(valid));
         assert.equal(fs.readFileSync(file, 'utf8'), valid, 'All edits remain unsaved.');
         const versions = notifications.filter(value => value.uri === uri && value.version !== undefined).map(value => value.version);
         assert.ok(versions.every((value, index) => index === 0 || value >= versions[index - 1]),
@@ -147,7 +226,7 @@ async function run() {
         evidence.serverExit = await exited;
         assert.deepEqual(evidence.serverExit, { code: 0, signal: null }, 'Lattice exits successfully after shutdown.');
         evidence.passed = true;
-        console.log('PASS: ' + evidence.cases.length + ' Option diagnostic edits and corrections; ' + path.join(root, 'result.json'));
+        console.log('PASS: ' + evidence.cases.length + ' Option/direct-capture diagnostic edits and corrections; ' + path.join(root, 'result.json'));
     } catch (error) {
         evidence.passed = false;
         evidence.error = error.stack;
