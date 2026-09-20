@@ -15,7 +15,14 @@ const prelude = 'module OptionWaypoint\n[<Measure>] type m\n[<Measure>] type s\n
 const entry = '\n[<EntryPoint>]\nlet main _ = ignore selected; 0\n';
 const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = choose (Some 2<m>)\n' +
     'let delayedChoose = Option.defaultWith (fun () -> 3<m>)\nlet delayed = delayedChoose None\n' +
-    entry.replace('ignore selected', 'ignore selected; ignore delayed');
+    'let optionalEager = Option.orElse (Some 1<m>) None\n' +
+    'let optionalDeferred = Option.orElseWith (fun () -> Some 2<m>) (Some 3<m>)\n' +
+    'let optionalChoose = Option.orElse (Some 4<m>)\nlet optionalPartial = optionalChoose None\n' +
+    'let optionalDelayedChoose = Option.orElseWith (fun () -> Some 5<m>)\nlet optionalDelayedPartial = optionalDelayedChoose None\n' +
+    'let anyOptional = Option.orElse\nlet optionalBare = anyOptional None (Some 6<m>)\n' +
+    'let anyDelayedOptional = Option.orElseWith\nlet optionalDelayedBare = anyDelayedOptional (fun () -> Some 7<m>) None\n' +
+    entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
+        'ignore optionalPartial; ignore optionalDelayedPartial; ignore optionalBare; ignore optionalDelayedBare');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
 const directCaptures = `module DirectCaptures
@@ -41,6 +48,13 @@ const cases = [
     ['defaultWith stored partial', 'CCS8040', 'let choose = Option.defaultWith (fun () -> 1<m>)\nlet selected = «choose (Some 2<s>)»'],
     ['defaultWith thunk domain', 'CCS8003', 'let selected = «Option.defaultWith (fun (_: int<m>) -> 1<m>)» None'],
     ['defaultWith explicit type arity', 'CCS8004', 'let selected = «Option.defaultWith<int<m>, int<s>>»'],
+    ['orElse dimensions', 'CCS8040', 'let selected = «Option.orElse (Some 1<m>) (Some 2<s>)»'],
+    ['orElse stored partial', 'CCS8040', 'let choose = Option.orElse (Some 1<m>)\nlet selected = «choose (Some 2<s>)»'],
+    ['orElse nonoption fallback', 'CCS8003', 'let selected = «Option.orElse 1<m>» None'],
+    ['orElseWith dimensions', 'CCS8040', 'let selected = «Option.orElseWith (fun () -> Some 1<m>) (Some 2<s>)»'],
+    ['orElseWith stored partial', 'CCS8040', 'let choose = Option.orElseWith (fun () -> Some 1<m>)\nlet selected = «choose (Some 2<s>)»'],
+    ['orElseWith thunk domain', 'CCS8003', 'let selected = «Option.orElseWith (fun (_: int<m>) -> Some 1<m>)» None'],
+    ['orElseWith nonoption thunk result', 'CCS8003', 'let selected = «Option.orElseWith (fun () -> 1<m>)» None'],
     ['fractional measure exponent', 'CCS8048', 'let selected = Option.defaultWith<float<«m^(1/2)»>>'],
     ['nonintegral inferred dimension', 'CCS8041', 'let selected = Option.defaultWith (fun () -> «Math.sqrt 2.0<m>») None']
 ];
@@ -176,6 +190,19 @@ async function run() {
         assert.match(evidence.partialHover?.contents.value ?? '', /choose: .*int<m>.*-> int<m>/);
         assert.match(evidence.delayedHover?.contents.value ?? '', /delayed: int<m>/);
         assert.match(evidence.delayedPartialHover?.contents.value ?? '', /delayedChoose: .*int<m>.*-> int<m>/);
+        evidence.optionalFallbackHovers = [];
+        for (const [name, type] of [
+            ['optionalEager', 'int<m> option'], ['optionalDeferred', 'int<m> option'],
+            ['optionalPartial', 'int<m> option'], ['optionalDelayedPartial', 'int<m> option'],
+            ['optionalBare', 'int<m> option'], ['optionalDelayedBare', 'int<m> option'],
+            ['optionalChoose', 'int<m> option -> int<m> option'],
+            ['optionalDelayedChoose', 'int<m> option -> int<m> option']
+        ]) {
+            const result = await hover(name);
+            assert.equal(result?.contents.value.split('\n')[0], name + ': ' + type,
+                name + ': optional result and dimensions');
+            evidence.optionalFallbackHovers.push({ name, version, result });
+        }
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');
             const finish = markedBody.indexOf('»');

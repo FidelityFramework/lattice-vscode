@@ -83,6 +83,9 @@ The Node tests cover registration, lifecycle, cancellation and proof rendering, 
 
 `test:options` uses the already built Lattice server over stdio to check measured
 `Option.defaultValue` and `Option.defaultWith` results and stored-partial hover.
+`Option.orElse` and `Option.orElseWith` cover exact dimensional optional results
+through direct, partial and bare-alias applications. Invalid option/thunk payloads,
+thunk domains and partial applications retain their exact compiler diagnostics.
 The retained script name also covers direct immutable captures: declaration and
 reference hovers preserve the exact source arity, dimensions and returned-function
 result, with a captureless control. A wrong explicit argument requires CCS8040 at
