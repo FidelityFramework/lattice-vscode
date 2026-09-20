@@ -42,6 +42,12 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let nativeSequence = seq { yield 1<m> }\n' +
     'let nestedSequence = seq {\n    let inner = seq { yield true }\n    yield 1<m>\n}\n' +
     'let makeSequence () =\n    let seed = 1<m>\n    seq { yield seed }\nlet capturedSequence = makeSequence ()\n' +
+    'let mappedSequence =\n    let threshold = 1<m>\n    let values = seq { yield 2<m> }\n' +
+    '    let filtered = Seq.filter (fun value -> value > threshold) values\n' +
+    '    Seq.map (fun value -> value + threshold) filtered\n' +
+    'let collectedSequence =\n    let tail = seq { yield 3<s> }\n    let values = seq { yield 1<m> }\n' +
+    '    let collected = Seq.collect (fun (_: int<m>) -> seq { yield 2<s> }) values\n' +
+    '    Seq.append collected tail\n' +
     'let rangeLoop =\n    for index in (-2 .. 2) do ignore index\n    ()\n' +
     'let loopCapture =\n    for index = 1 to 2 do\n        let visit = fun (value: int) -> ignore (index + value)\n        visit 0\n    ()\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
@@ -50,7 +56,8 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
         'ignore folded; ignore foldedBack; ignore foldBare; ignore foldBackBare; ' +
         'ignore resultMapped; ignore resultErrorMapped; ignore resultBound; ' +
         'ignore resultDefaulted; ignore resultRecovered; ignore resultIterated; ignore resultIsOk; ignore resultIsError; ' +
-        'ignore nativeSequence; ignore nestedSequence; ignore capturedSequence; ignore rangeLoop; ignore loopCapture');
+        'ignore nativeSequence; ignore nestedSequence; ignore capturedSequence; ' +
+        'ignore mappedSequence; ignore collectedSequence; ignore rangeLoop; ignore loopCapture');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
 const directCaptures = `module DirectCaptures
@@ -114,6 +121,8 @@ const cases = [
     ['Sequence mixed yield dimensions', 'CCS8040', 'let selected = seq { yield 1<m>; «yield 2<s>» }'],
     ['Sequence scalar delegation', 'CCS8003', 'let selected = seq { «yield! 1» }'],
     ['Sequence conflicting delegations', 'CCS8040', 'let selected = seq { yield! seq { yield 1<m> }; «yield! seq { yield 2<s> }» }'],
+    ['Seq producer callback dimension', 'CCS8040', 'let selected = «Seq.map (fun (value: int<m>) -> value) (seq { yield 1<s> })»'],
+    ['Seq producer delegation dimension', 'CCS8040', 'let selected = seq { yield 1<m>; «yield! Seq.append (seq { yield 2<s> }) (seq { yield 3<s> })» }'],
     ['fractional measure exponent', 'CCS8048', 'let selected = Option.defaultWith<float<«m^(1/2)»>>'],
     ['nonintegral inferred dimension', 'CCS8041', 'let selected = Option.defaultWith (fun () -> «Math.sqrt 2.0<m>») None'],
     ['intrinsic Math.sin dimension', 'CCS8040', 'let selected = «Math.sin 1.0<m>»']
@@ -222,6 +231,52 @@ async function run() {
         assert.equal(outer?.contents.value.split('\n')[0], 'nestedSequence: seq<int<m>>');
         assert.equal(inner?.contents.value.split('\n')[0], 'inner: seq<bool>');
         return { version, outer, inner };
+    };
+    const sequenceProducerHovers = async () => {
+        const lines = valid.split('\n');
+        const at = (marker, token) => {
+            const line = lines.findIndex(text => text.includes(marker));
+            assert.ok(line >= 0, marker);
+            const character = lines[line].indexOf(token);
+            assert.ok(character >= 0, token);
+            return { line, character };
+        };
+        const hoverAt = (marker, token) => connection.sendRequest('textDocument/hover', {
+            textDocument: { uri }, position: at(marker, token)
+        });
+        const results = [];
+        for (const [binding, type] of [['mappedSequence', 'seq<int<m>>'], ['collectedSequence', 'seq<int<s>>']]) {
+            const result = await hover(binding);
+            assert.equal(result?.contents.value.split('\n')[0], binding + ': ' + type);
+            results.push({ binding, result });
+        }
+        const applications = [];
+        for (const [operation, finalArgument, type] of [
+            ['Seq.filter', ' values', 'seq<int<m>>'], ['Seq.map', ' filtered', 'seq<int<m>>'],
+            ['Seq.collect', ' values', 'seq<int<s>>'], ['Seq.append', ' tail', 'seq<int<s>>']
+        ]) {
+            // Query the full-call separator outside the callee, earlier
+            // partial application and final argument token intervals.
+            const result = await hoverAt(operation, finalArgument);
+            assert.equal(result?.contents.value.split('\n')[0], type,
+                operation + ': generated snapshots must not replace the source application result');
+            applications.push({ operation, result });
+        }
+        const declaration = await hoverAt('let threshold', 'threshold');
+        const start = at('let threshold', 'threshold');
+        assert.equal(declaration?.contents.value.split('\n')[0], 'threshold: int<m>');
+        assert.deepEqual(declaration.range, { start, end: { line: start.line, character: start.character + 'threshold'.length } });
+        const captures = [];
+        for (const operation of ['Seq.filter', 'Seq.map']) {
+            const result = await hoverAt(operation, 'threshold');
+            assert.equal(result?.contents.value.split('\n')[0], 'threshold: int<m>');
+            const definition = await connection.sendRequest('textDocument/definition', {
+                textDocument: { uri }, position: at(operation, 'threshold')
+            });
+            assert.deepEqual(definition, { uri, range: declaration.range });
+            captures.push({ operation, result, definition });
+        }
+        return { version, results, applications, declaration, captures };
     };
     const loopCaptureHovers = async () => {
         const lines = valid.split('\n');
@@ -382,6 +437,8 @@ async function run() {
         evidence.nestedSequence = await nestedSequenceHovers();
         evidence.capturedSequence = await capturedSequenceHovers();
         evidence.sequenceRepairs = [];
+        evidence.sequenceProducers = await sequenceProducerHovers();
+        evidence.sequenceProducerRepairs = [];
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');
             const finish = markedBody.indexOf('»');
@@ -420,6 +477,7 @@ async function run() {
                 evidence.ceRepairs.push({ name, version, result });
             }
             if (name.startsWith('Sequence ')) evidence.sequenceRepairs.push(await nestedSequenceHovers());
+            if (name.startsWith('Seq producer ')) evidence.sequenceProducerRepairs.push(await sequenceProducerHovers());
             if (name.startsWith('Result.default') || name.startsWith('Result.iter') || name.startsWith('Result.is')) {
                 const operation = name.split(' ')[0];
                 const [binding, type] = {

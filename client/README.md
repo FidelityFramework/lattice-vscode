@@ -124,6 +124,12 @@ A sequence capturing a local measured seed retains its source `seq<int<m>>`
 expression hover and `unit -> seq<int<m>>` factory signature. Go-to-definition
 from the captured seed returns its original declaration; an internal generator
 formal cannot replace the source sequence hover.
+Two measured producer compositions cover `Seq.filter`/`map` and
+`Seq.collect`/`append`. Binding and full-application hovers retain `seq<T>` despite
+generated operand snapshots, and captured callback references navigate to the
+original measured declaration. Callback/delegation dimension errors require
+exact CCS8040 spans; repairs restore these projections through the actual server.
+This checks source/editor parity without claiming sequence execution.
 The retained script name also covers direct immutable captures: declaration and
 reference hovers preserve the exact source arity, dimensions and returned-function
 result, with a captureless control. A wrong explicit argument requires CCS8040 at
