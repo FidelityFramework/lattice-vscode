@@ -21,8 +21,13 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let optionalDelayedChoose = Option.orElseWith (fun () -> Some 5<m>)\nlet optionalDelayedPartial = optionalDelayedChoose None\n' +
     'let anyOptional = Option.orElse\nlet optionalBare = anyOptional None (Some 6<m>)\n' +
     'let anyDelayedOptional = Option.orElseWith\nlet optionalDelayedBare = anyDelayedOptional (fun () -> Some 7<m>) None\n' +
+    'let iterationResult = Option.iter (fun (value: int<m>) -> ignore value) (Some 1<m>)\n' +
+    'let iterationAction = Option.iter (fun (value: int<m>) -> ignore value)\nlet iterationPartial = iterationAction None\n' +
+    'let anyIteration = Option.iter\nlet iterationBare = anyIteration (fun (value: int<m>) -> ignore value) (Some 2<m>)\n' +
+    'let iterationBareSeconds = anyIteration (fun (value: int<s>) -> ignore value) (Some 3<s>)\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
-        'ignore optionalPartial; ignore optionalDelayedPartial; ignore optionalBare; ignore optionalDelayedBare');
+        'ignore optionalPartial; ignore optionalDelayedPartial; ignore optionalBare; ignore optionalDelayedBare; ' +
+        'ignore iterationResult; ignore iterationPartial; ignore iterationBare; ignore iterationBareSeconds');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
 const directCaptures = `module DirectCaptures
@@ -55,6 +60,10 @@ const cases = [
     ['orElseWith stored partial', 'CCS8040', 'let choose = Option.orElseWith (fun () -> Some 1<m>)\nlet selected = «choose (Some 2<s>)»'],
     ['orElseWith thunk domain', 'CCS8003', 'let selected = «Option.orElseWith (fun (_: int<m>) -> Some 1<m>)» None'],
     ['orElseWith nonoption thunk result', 'CCS8003', 'let selected = «Option.orElseWith (fun () -> 1<m>)» None'],
+    ['iter nonunit callback result', 'CCS8003', 'let selected = «Option.iter (fun (value: int<m>) -> value)» None'],
+    ['iter argument dimension', 'CCS8040', 'let selected = «Option.iter (fun (_: int<m>) -> ()) (Some 1<s>)»'],
+    ['iter nonoption input', 'CCS8003', 'let selected = «Option.iter (fun (_: int<m>) -> ()) 1<m>»'],
+    ['iter nonfunction callback', 'CCS8003', 'let selected = «Option.iter 1<m>» None'],
     ['fractional measure exponent', 'CCS8048', 'let selected = Option.defaultWith<float<«m^(1/2)»>>'],
     ['nonintegral inferred dimension', 'CCS8041', 'let selected = Option.defaultWith (fun () -> «Math.sqrt 2.0<m>») None']
 ];
@@ -202,6 +211,16 @@ async function run() {
             assert.equal(result?.contents.value.split('\n')[0], name + ': ' + type,
                 name + ': optional result and dimensions');
             evidence.optionalFallbackHovers.push({ name, version, result });
+        }
+        evidence.iterationHovers = [];
+        for (const [name, type] of [
+            ['iterationResult', 'unit'], ['iterationPartial', 'unit'],
+            ['iterationBare', 'unit'], ['iterationBareSeconds', 'unit'],
+            ['iterationAction', 'int<m> option -> unit']
+        ]) {
+            const result = await hover(name);
+            assert.equal(result?.contents.value.split('\n')[0], name + ': ' + type);
+            evidence.iterationHovers.push({ name, version, result });
         }
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');
