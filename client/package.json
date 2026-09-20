@@ -1,0 +1,75 @@
+{
+  "name": "lattice-clef",
+  "displayName": "Lattice for Clef (Development)",
+  "description": "Development client for the Clef Compiler Service through Lattice LSP.",
+  "version": "0.0.1",
+  "publisher": "lattice-local",
+  "private": true,
+  "license": "MIT",
+  "engines": { "vscode": "^1.90.0", "node": ">=22" },
+  "main": "./extension.cjs",
+  "icon": "images/clef.png",
+  "activationEvents": ["onLanguage:clef"],
+  "categories": ["Programming Languages"],
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": false },
+    "virtualWorkspaces": { "supported": false }
+  },
+  "contributes": {
+    "languages": [{ "id": "clef", "aliases": ["Clef", "clef"], "extensions": [".clef"], "icon": { "light": "images/clef.svg", "dark": "images/clef.svg" } }],
+    "grammars": [{ "language": "clef", "scopeName": "source.clef", "path": "./syntaxes/clef.json" }],
+    "iconThemes": [{ "id": "lattice-clef", "label": "Lattice (Seti + Clef)", "path": "./icons/lattice-icon-theme.json" }],
+    "configurationDefaults": { "files.associations": { "*.fidproj": "toml" } },
+    "commands": [
+      { "command": "lattice.restartServer", "title": "Lattice: Restart Server" },
+      { "command": "lattice.refreshProofs", "title": "Lattice: Refresh Proofs" },
+      { "command": "lattice.toggleProofAnnotations", "title": "Lattice: Toggle Source Proof Links", "icon": "$(beaker)", "enablement": "workspaceFolderCount == 1" },
+      { "command": "lattice.expandAllProofs", "title": "Lattice: Expand All Proofs", "icon": "$(expand-all)" },
+      { "command": "lattice.collapseAllProofs", "title": "Lattice: Collapse All Proofs", "icon": "$(collapse-all)" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "lattice.toggleProofAnnotations", "when": "view == lattice.proofs && workspaceFolderCount == 1", "group": "navigation@1" },
+        { "command": "lattice.expandAllProofs", "when": "view == lattice.proofs", "group": "navigation@2" },
+        { "command": "lattice.collapseAllProofs", "when": "view == lattice.proofs", "group": "navigation@3" }
+      ],
+      "editor/title": [{ "command": "lattice.toggleProofAnnotations", "when": "workspaceFolderCount == 1 && (resourceLangId == clef || resourceExtname == .fidproj)", "group": "navigation@10" }]
+    },
+    "views": { "explorer": [{ "id": "lattice.proofs", "name": "Clef Proofs" }] },
+    "configuration": {
+      "title": "Lattice",
+      "properties": {
+        "lattice.proofs.showAnnotations": {
+          "type": "boolean", "default": true, "scope": "resource",
+          "description": "Show clickable source proof links above code. The Clef Proofs sidebar and proof checking remain available when links are hidden."
+        },
+        "lattice.proofs.display": {
+          "type": "string", "enum": ["hidden", "drawers", "full"], "default": "drawers", "scope": "resource",
+          "deprecationMessage": "Use lattice.proofs.showAnnotations for source links and the Clef Proofs expand/collapse controls for the sidebar.",
+          "description": "Legacy proof display preference. Only an explicitly configured hidden value affects source links when showAnnotations is not configured."
+        },
+        "lattice.server.command": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Executable for a locally built Lattice stdio server. Leave empty to disable startup. For a .NET DLL, use dotnet and put the DLL path in server.args."
+        },
+        "lattice.server.args": {
+          "type": "array", "items": { "type": "string" }, "default": [], "scope": "machine-overridable",
+          "description": "Arguments passed directly to the Lattice executable, without shell expansion or added compiler-specific flags."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "prepare:grammar": "node scripts/prepare-grammar.cjs",
+    "prepare:icons": "node scripts/prepare-icons.cjs",
+    "prepare:toml": "node scripts/prepare-toml.cjs",
+    "prepare:demo": "node scripts/prepare-demo.cjs",
+    "test": "node --test test/*.test.cjs",
+    "test:host": "node test/run-host.cjs",
+    "test:f5-host": "node test/run-f5-host.cjs",
+    "test:ccs-host": "node test/run-ccs-host.cjs",
+    "test:options": "node test/server-options.cjs",
+    "test:toml-host": "node test/run-toml-host.cjs"
+  },
+  "dependencies": { "vscode-languageclient": "9.0.1" }
+}

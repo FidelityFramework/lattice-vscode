@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [{
+    "name": "Lattice: HelloDimensionsProof",
+    "type": "extensionHost",
+    "request": "launch",
+    "runtimeExecutable": "${execPath}",
+    "args": [
+      "--extensionDevelopmentPath=${workspaceFolder}",
+      "--extensionDevelopmentPath=${workspaceFolder}/.demo-extensions/tamasfe.even-better-toml-0.21.2",
+      "${workspaceFolder}/.demo",
+      "--goto", "${workspaceFolder}/.demo/Main.clef"
+    ],
+    "preLaunchTask": "Prepare Clef demo"
+  }, {
+    "name": "Run Lattice locally",
+    "type": "extensionHost",
+    "request": "launch",
+    "runtimeExecutable": "${execPath}",
+    "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+    "preLaunchTask": "Prepare Clef grammar"
+  }]
+}
