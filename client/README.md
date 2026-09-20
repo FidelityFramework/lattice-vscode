@@ -91,6 +91,13 @@ alias used at two dimensions, with callback-result, dimension, input and callbac
 `Option.fold` and `Option.foldBack` preserve independent state/payload dimensions,
 explicit type-argument order, their different partial signatures and bare aliases.
 Callback state, payload and result errors retain exact compiler codes and spans.
+`Result.map`, `mapError` and `bind` preserve success/error dimensions independently,
+with exact two-argument Result hovers and a stored mapping signature.
+Three exact CCS8040 cases reject mismatched success/error callback inputs and a
+bind callback that changes the shared error dimension.
+Simple parenthesized integer ranges retain unit results and `int` induction
+hovers. Floating, Boolean and measured bounds require the compiler's exact
+CCS8003/CCS8040 loop spans.
 The retained script name also covers direct immutable captures: declaration and
 reference hovers preserve the exact source arity, dimensions and returned-function
 result, with a captureless control. A wrong explicit argument requires CCS8040 at

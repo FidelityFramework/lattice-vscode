@@ -30,10 +30,16 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let anyFold = Option.fold\nlet anyFoldBack = Option.foldBack\n' +
     'let foldBare = anyFold (fun (state: int<m>) (_: int<s>) -> state) 1<m> (Some 2<s>)\n' +
     'let foldBackBare = anyFoldBack (fun (_: int<s>) (state: int<m>) -> state) (Some 3<s>) foldBare\n' +
+    '[<Measure>] type kg\n' +
+    'let resultMapPartial = Result.map<int<m>, int<kg>, int<s>> (fun _ -> 1<kg>)\nlet resultMapped = resultMapPartial (Ok 2<m>)\n' +
+    'let resultErrorMapped = Result.mapError<int<m>, int<s>, int<kg>> (fun _ -> 1<kg>) (Error 2<s>)\n' +
+    'let resultBound = Result.bind<int<m>, int<kg>, int<s>> (fun _ -> Ok 1<kg>) (Ok 2<m>)\n' +
+    'let rangeLoop =\n    for index in (-2 .. 2) do ignore index\n    ()\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
         'ignore optionalPartial; ignore optionalDelayedPartial; ignore optionalBare; ignore optionalDelayedBare; ' +
         'ignore iterationResult; ignore iterationPartial; ignore iterationBare; ignore iterationBareSeconds; ' +
-        'ignore folded; ignore foldedBack; ignore foldBare; ignore foldBackBare');
+        'ignore folded; ignore foldedBack; ignore foldBare; ignore foldBackBare; ' +
+        'ignore resultMapped; ignore resultErrorMapped; ignore resultBound; ignore rangeLoop');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
 const directCaptures = `module DirectCaptures
@@ -77,6 +83,12 @@ const cases = [
     ['fold callback state dimension', 'CCS8040', 'let selected = «Option.fold (fun (state: int<m>) (_: int<s>) -> state) 1<s>» None'],
     ['foldBack callback payload dimension', 'CCS8040', 'let selected = «Option.foldBack (fun (_: int<s>) (state: int<m>) -> state) (Some 2<m>)» 1<m>'],
     ['fold callback result dimension', 'CCS8040', 'let selected = «Option.fold (fun (state: int<m>) (_: int<s>) -> 1<s>)» 1<m> None'],
+    ['Result.map success dimension', 'CCS8040', 'let selected = «Result.map (fun (_: int<m>) -> true) (Ok 2<s>: Result<int<s>, bool>)»'],
+    ['Result.mapError error dimension', 'CCS8040', 'let selected = «Result.mapError (fun (_: int<m>) -> true) (Error 2<s>: Result<bool, int<s>>)»'],
+    ['Result.bind shared error dimension', 'CCS8040', 'let selected = «Result.bind (fun (_: bool) -> (Error 3<m>: Result<bool, int<m>>)) (Error 2<s>: Result<bool, int<s>>)»'],
+    ['range loop floating bound', 'CCS8003', 'let selected =\n    «for index in 0.0 .. 1 do ignore index»\n    ()'],
+    ['range loop Boolean bound', 'CCS8003', 'let selected =\n    «for index in true .. 1 do ignore index»\n    ()'],
+    ['range loop measured bound', 'CCS8040', 'let selected =\n    «for index in 1<m> .. 3 do ignore index»\n    ()'],
     ['fractional measure exponent', 'CCS8048', 'let selected = Option.defaultWith<float<«m^(1/2)»>>'],
     ['nonintegral inferred dimension', 'CCS8041', 'let selected = Option.defaultWith (fun () -> «Math.sqrt 2.0<m>») None'],
     ['intrinsic Math.sin dimension', 'CCS8040', 'let selected = «Math.sin 1.0<m>»']
@@ -109,7 +121,7 @@ async function run() {
     const connection = createMessageConnection(child.stdout, child.stdin);
     const notifications = [];
     const evidence = { server, assemblies, node: process.version,
-        scope: 'Option, direct immutable capture and lexical Math source projections through real CCS/LSP; no completion, native execution or proof-discharge claim.',
+        scope: 'Option/Result, integer ranges, direct immutable capture and lexical Math source projections through real CCS/LSP; no completion, native execution or proof-discharge claim.',
         cases: [], notifications };
     let failure;
     child.on('error', error => { failure = error; });
@@ -246,6 +258,27 @@ async function run() {
             assert.equal(result?.contents.value.split('\n')[0], name + ': ' + type);
             evidence.foldHovers.push({ name, version, result });
         }
+        evidence.resultHovers = [];
+        for (const [name, type] of [
+            ['resultMapped', 'Result<int<kg>, int<s>>'],
+            ['resultErrorMapped', 'Result<int<m>, int<kg>>'],
+            ['resultBound', 'Result<int<kg>, int<s>>'],
+            ['resultMapPartial', 'Result<int<m>, int<s>> -> Result<int<kg>, int<s>>']
+        ]) {
+            const result = await hover(name);
+            assert.equal(result?.contents.value.split('\n')[0], name + ': ' + type);
+            evidence.resultHovers.push({ name, version, result });
+        }
+        const rangeHover = await hover('rangeLoop');
+        assert.equal(rangeHover?.contents.value.split('\n')[0], 'rangeLoop: unit');
+        const validLines = valid.split('\n');
+        const loopLine = validLines.findIndex(line => line.includes('for index in (-2 .. 2)'));
+        assert.ok(loopLine >= 0);
+        const inductionHover = await connection.sendRequest('textDocument/hover', {
+            textDocument: { uri }, position: { line: loopLine, character: validLines[loopLine].lastIndexOf('index') }
+        });
+        assert.equal(inductionHover?.contents.value.split('\n')[0], 'index: int');
+        evidence.rangeLoopHovers = { version, result: rangeHover, induction: inductionHover };
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');
             const finish = markedBody.indexOf('»');
