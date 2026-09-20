@@ -68,6 +68,23 @@ With the validated compiler integration, commenting out `open HelloDimensionsPro
 
 ## Regression checks
 
+### Planned target-aware evidence — 2026-09-20
+
+[Composer M-01 §5](../../Composer/docs/PRDs/M-01-DialectAdmission.md#5-numeric-selection-parallelism-and-design-time-projection)
+extends the compiler-owned projection plan to numeric selection, arithmetic
+construction, wait relationships and target scheduler premises. Display the
+selected profile and source-related established/refuted/unresolved evidence
+provided by CCS. Keep representation error, computation error, reproducibility
+and cost distinct; a proved source obligation still does not certify lowering.
+Planned client gates cover changed target capabilities, stale-result exclusion,
+exact diagnostics and unsaved repair using the real server. The client derives
+no numeric or liveness facts. No new protocol or multi-target comparison UI is
+implemented by this note; use the
+[shared waypoint record](../../Composer/docs/Language_Coverage_Waypoints.md)
+for synchronized implementation status.
+
+### Existing checks
+
 From `client/` after preparation:
 
 ```sh
