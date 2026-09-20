@@ -44,6 +44,10 @@ let main _ =
     let produced = make () 3<m>
     if shifted = unchanged && produced = 10<m> then 0 else 1
 `;
+const lexicalMath = [
+    ['local Math module', 'module Math =\n    let sin (value: int<m>) = value\nlet selected = Math.sin 2<m>'],
+    ['local Math record', 'type Functions = { sin: int<m> -> int<m> }\nlet Math = { sin = fun value -> value }\nlet selected = Math.sin 2<m>']
+];
 const cases = [
     ['defaultValue dimensions', 'CCS8040', 'let selected = «Option.defaultValue 1<m> (Some 2<s>)»'],
     ['defaultValue stored partial', 'CCS8040', 'let choose = Option.defaultValue 1<m>\nlet selected = «choose (Some 2<s>)»'],
@@ -65,7 +69,8 @@ const cases = [
     ['iter nonoption input', 'CCS8003', 'let selected = «Option.iter (fun (_: int<m>) -> ()) 1<m>»'],
     ['iter nonfunction callback', 'CCS8003', 'let selected = «Option.iter 1<m>» None'],
     ['fractional measure exponent', 'CCS8048', 'let selected = Option.defaultWith<float<«m^(1/2)»>>'],
-    ['nonintegral inferred dimension', 'CCS8041', 'let selected = Option.defaultWith (fun () -> «Math.sqrt 2.0<m>») None']
+    ['nonintegral inferred dimension', 'CCS8041', 'let selected = Option.defaultWith (fun () -> «Math.sqrt 2.0<m>») None'],
+    ['intrinsic Math.sin dimension', 'CCS8040', 'let selected = «Math.sin 1.0<m>»']
 ];
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const position = text => {
@@ -87,7 +92,7 @@ async function run() {
     fs.writeFileSync(file, valid);
     fs.writeFileSync(project, '[package]\nname = "SurfaceWaypoint"\n[compilation]\ntarget = "library"\n' +
         '[build]\nsources = ["Main.clef"]\noutput_kind = "library"\n');
-    console.log('Option and direct-capture editor evidence: ' + root);
+    console.log('Compiler surface editor evidence: ' + root);
     const log = fs.openSync(path.join(root, 'server.log'), 'w');
     const child = spawn(process.env.LATTICE_DOTNET ?? 'dotnet', [server, '--project', project],
         { stdio: ['pipe', 'pipe', log] });
@@ -95,7 +100,7 @@ async function run() {
     const connection = createMessageConnection(child.stdout, child.stdin);
     const notifications = [];
     const evidence = { server, assemblies, node: process.version,
-        scope: 'Option and direct immutable capture source projections through real CCS/LSP; no completion, native execution or proof-discharge claim.',
+        scope: 'Option, direct immutable capture and lexical Math source projections through real CCS/LSP; no completion, native execution or proof-discharge claim.',
         cases: [], notifications };
     let failure;
     child.on('error', error => { failure = error; });
@@ -236,6 +241,20 @@ async function run() {
             assert.deepEqual(errors[0].range, { start: position(prefix), end: position(prefix + span) }, name);
             evidence.cases.push({ name, version, source, diagnostic: errors[0] });
             fs.writeFileSync(path.join(root, 'result.json'), JSON.stringify(evidence, null, 2) + '\n');
+            if (name === 'intrinsic Math.sin dimension') {
+                evidence.lexicalMathRepairs = [];
+                for (const [lexicalName, body] of lexicalMath) {
+                    const lexicalSource = prelude + body + entry;
+                    noErrors(await change(lexicalSource));
+                    const result = await connection.sendRequest('textDocument/hover', {
+                        textDocument: { uri },
+                        position: position(lexicalSource.slice(0, lexicalSource.indexOf('let selected =') + 5))
+                    });
+                    assert.equal(result?.contents.value.split('\n')[0], 'selected: int<m>', lexicalName);
+                    evidence.lexicalMathRepairs.push({ name: lexicalName, source: lexicalSource, version, result });
+                    console.log('PASS: ' + lexicalName + ' measured hover and unsaved repair');
+                }
+            }
             noErrors(await change(valid));
             assert.match((await hover('selected'))?.contents.value ?? '', /selected: int<m>/,
                 name + ': unsaved correction restores the measured hover');
@@ -272,7 +291,7 @@ async function run() {
         evidence.serverExit = await exited;
         assert.deepEqual(evidence.serverExit, { code: 0, signal: null }, 'Lattice exits successfully after shutdown.');
         evidence.passed = true;
-        console.log('PASS: ' + evidence.cases.length + ' Option/direct-capture diagnostic edits and corrections; ' + path.join(root, 'result.json'));
+        console.log('PASS: ' + evidence.cases.length + ' compiler-surface diagnostic edits and corrections; ' + path.join(root, 'result.json'));
     } catch (error) {
         evidence.passed = false;
         evidence.error = error.stack;
