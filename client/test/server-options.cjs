@@ -71,6 +71,19 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let countedSequence = seq {\n    for ascending in 1 .. 2 do\n        yield ascending\n' +
     '    for descending = 2 downto 1 do\n        yield descending\n}\n' +
     'let consumedSequence =\n    for item in seq { yield 1<m> } do\n        ignore item\n    ()\n' +
+    'let seqIterationAction (value: int<m>) = ignore value\n' +
+    'let seqIterated = seq { yield 1<m>; yield 2<m> } |> Seq.iter seqIterationAction\n' +
+    'let seqTaken = seq { yield 1<m>; yield 2<m> } |> Seq.take 1\n' +
+    'let seqFolder (state: int<s>) (value: int<m>) = ignore value; state + 1<s>\n' +
+    'let seqFolded = seq { yield 1<m>; yield 2<m> } |> Seq.fold<int<s>, int<m>> seqFolder 0<s>\n' +
+    'let seqExistsPredicate (value: int<m>) = value > 0<m>\n' +
+    'let seqExists = seq { yield 1<m>; yield 2<m> } |> Seq.exists<int<m>> seqExistsPredicate\n' +
+    'let seqForallPredicate (value: int<s>) = value <= 3<s>\n' +
+    'let seqForall = seq { yield 1<s>; yield 2<s> } |> Seq.forall<int<s>> seqForallPredicate\n' +
+    'let seqHead = seq { yield 1<m>; yield 2<m> } |> Seq.tryHead<int<m>>\n' +
+    'let seqEmptyHead = seq { if false then yield 1<s> } |> Seq.tryHead<int<s>>\n' +
+    'let seqChooser (value: int<m>) = if value > 1<m> then Some 2<s> else None\n' +
+    'let seqPicked = seq { yield 1<m>; yield 2<m> } |> Seq.tryPick<int<m>, int<s>> seqChooser\n' +
     'let rangeLoop =\n    for index in (-2 .. 2) do ignore index\n    ()\n' +
     'let loopCapture =\n    for index = 1 to 2 do\n        let visit = fun (value: int) -> ignore (index + value)\n        visit 0\n    ()\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
@@ -84,6 +97,8 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
         'ignore effectfulDelegation; ignore nestedDelegation; ' +
         'ignore loopingSequence; ignore deferredSequence; ' +
         'ignore nestedLocalSequence; ignore countedSequence; ignore consumedSequence; ' +
+        'ignore seqIterated; ignore seqTaken; ignore seqFolded; ignore seqExists; ignore seqForall; ' +
+        'ignore seqHead; ignore seqEmptyHead; ignore seqPicked; ' +
         'ignore rangeLoop; ignore loopCapture');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
@@ -152,6 +167,17 @@ const cases = [
     ['Sequence consumption scalar input', 'CCS8003', 'let selected =\n    «for item in 1 do ()»\n    ()'],
     ['Seq producer callback dimension', 'CCS8040', 'let selected = «Seq.map (fun (value: int<m>) -> value) (seq { yield 1<s> })»'],
     ['Seq producer delegation dimension', 'CCS8040', 'let selected = seq { yield 1<m>; «yield! Seq.append (seq { yield 2<s> }) (seq { yield 3<s> })» }'],
+    ['Seq consumer take count kind', 'CCS8003', 'let selected = «Seq.take true» (seq { yield 1<m> })'],
+    ['Seq consumer iter callback result', 'CCS8003', 'let selected = «Seq.iter (fun (value: int<m>) -> value)» (seq { yield 1<m> })'],
+    ['Seq consumer iter payload dimension', 'CCS8040', 'let selected = «Seq.iter (fun (_: int<s>) -> ()) (seq { yield 1<m> })»'],
+    ['Seq consumer fold callback result', 'CCS8040', 'let selected = «Seq.fold (fun (_: int<s>) (_: int<m>) -> 1<m>)» 0<s> (seq { yield 1<m> })'],
+    ['Seq consumer exists predicate result', 'CCS8003', 'let selected = «Seq.exists (fun (value: int<m>) -> value)» (seq { yield 1<m> })'],
+    ['Seq consumer exists payload dimension', 'CCS8040', 'let selected = «Seq.exists (fun (_: int<s>) -> true) (seq { yield 1<m> })»'],
+    ['Seq consumer forall predicate result', 'CCS8003', 'let selected = «Seq.forall (fun (value: int<s>) -> value)» (seq { yield 1<s> })'],
+    ['Seq consumer forall payload dimension', 'CCS8040', 'let selected = «Seq.forall (fun (_: int<m>) -> true) (seq { yield 1<s> })»'],
+    ['Seq consumer tryHead payload dimension', 'CCS8040', 'let selected = «Seq.tryHead<int<m>> (seq { yield 1<s> })»'],
+    ['Seq consumer tryPick payload dimension', 'CCS8040', 'let selected = «Seq.tryPick (fun (_: int<s>) -> Some 1<m>) (seq { yield 1<m> })»'],
+    ['Seq consumer tryPick callback result', 'CCS8003', 'let selected = «Seq.tryPick (fun (value: int<m>) -> value)» (seq { yield 1<m> })'],
     ['fractional measure exponent', 'CCS8048', 'let selected = Option.defaultWith<float<«m^(1/2)»>>'],
     ['nonintegral inferred dimension', 'CCS8041', 'let selected = Option.defaultWith (fun () -> «Math.sqrt 2.0<m>») None'],
     ['intrinsic Math.sin dimension', 'CCS8040', 'let selected = «Math.sin 1.0<m>»']
@@ -440,6 +466,26 @@ async function run() {
         }
         return { version, results, loop, declaredSample, calledSample, captures };
     };
+    const sequenceConsumerHovers = async () => {
+        const results = [];
+        for (const [binding, type] of [
+            ['seqIterated', 'unit'], ['seqTaken', 'seq<int<m>>'], ['seqFolded', 'int<s>'],
+            ['seqIterationAction', 'int<m> -> unit'], ['seqFolder', 'int<s> -> int<m> -> int<s>'],
+            ['seqExists', 'bool'], ['seqForall', 'bool'],
+            ['seqExistsPredicate', 'int<m> -> bool'], ['seqForallPredicate', 'int<s> -> bool'],
+            ['seqHead', 'int<m> option'], ['seqEmptyHead', 'int<s> option'],
+            ['seqPicked', 'int<s> option'], ['seqChooser', 'int<m> -> int<s> option']
+        ]) {
+            const marker = valid.indexOf('let ' + binding + ' ');
+            assert.ok(marker >= 0, binding);
+            const result = await connection.sendRequest('textDocument/hover', {
+                textDocument: { uri }, position: position(valid.slice(0, marker + 5))
+            });
+            assert.equal(result?.contents.value.split('\n')[0], binding + ': ' + type);
+            results.push({ binding, result });
+        }
+        return { version, results };
+    };
     const sequenceContinuationHovers = async () => {
         const lines = valid.split('\n');
         const at = (marker, token) => {
@@ -665,6 +711,8 @@ async function run() {
         evidence.sequenceEvaluation = await sequenceEvaluationHovers();
         evidence.sequenceContinuation = await sequenceContinuationHovers();
         evidence.sequenceContinuationRepairs = [];
+        evidence.sequenceConsumers = await sequenceConsumerHovers();
+        evidence.sequenceConsumerRepairs = [];
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');
             const finish = markedBody.indexOf('»');
@@ -708,6 +756,7 @@ async function run() {
             if (name === 'Sequence consumption scalar input')
                 evidence.sequenceContinuationRepairs.push(await sequenceContinuationHovers());
             if (name.startsWith('Seq producer ')) evidence.sequenceProducerRepairs.push(await sequenceProducerHovers());
+            if (name.startsWith('Seq consumer ')) evidence.sequenceConsumerRepairs.push(await sequenceConsumerHovers());
             if (name.startsWith('Result.default') || name.startsWith('Result.iter') || name.startsWith('Result.is')) {
                 const operation = name.split(' ')[0];
                 const [binding, type] = {

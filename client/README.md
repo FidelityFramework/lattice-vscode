@@ -73,6 +73,7 @@ From `client/` after preparation:
 ```sh
 npm test
 npm run test:options
+npm run test:platform
 npm run test:host
 npm run test:f5-host
 npm run test:ccs-host
@@ -80,6 +81,16 @@ npm run test:toml-host
 ```
 
 The Node tests cover registration, lifecycle, cancellation and proof rendering, including invalid/stale responses. `test:host` uses a protocol fixture in real VSCode to check tokenization, transport, document lifecycle and unresponsive-server cancellation. It establishes no CCS semantics.
+
+`test:platform` loads the shared Composer `tests/Fixtures/ProgramLifetime`
+project through the built Lattice server. It checks renamed immutable/mutable
+space designations, exact CCS8206/CCS8207 declaration diagnostics, unsaved
+repairs and cross-file definition links. This is selected-platform source
+checking; it does not compile a native image. Node.js 22 or later is required.
+The same gate checks `clef/programInitialization` against a separate source-only
+project: ordered initializer IDs and source locations, storage intent without
+native authority, and pending dependency facts across an unsaved edit/repair.
+This read-only query adds no editor UI and performs no client-side selection.
 
 `test:options` uses the already built Lattice server over stdio to check measured
 `Option.defaultValue` and `Option.defaultWith` results and stored-partial hover.

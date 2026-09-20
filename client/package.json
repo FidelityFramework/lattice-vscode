@@ -69,6 +69,7 @@
     "test:f5-host": "node test/run-f5-host.cjs",
     "test:ccs-host": "node test/run-ccs-host.cjs",
     "test:options": "node test/server-options.cjs",
+    "test:platform": "node test/server-platform.cjs",
     "test:toml-host": "node test/run-toml-host.cjs"
   },
   "dependencies": { "vscode-languageclient": "9.0.1" }
