@@ -25,9 +25,15 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let iterationAction = Option.iter (fun (value: int<m>) -> ignore value)\nlet iterationPartial = iterationAction None\n' +
     'let anyIteration = Option.iter\nlet iterationBare = anyIteration (fun (value: int<m>) -> ignore value) (Some 2<m>)\n' +
     'let iterationBareSeconds = anyIteration (fun (value: int<s>) -> ignore value) (Some 3<s>)\n' +
+    'let foldPartial = Option.fold<int<m>, int<s>> (fun state value -> state) 1<m>\nlet folded = foldPartial (Some 2<s>)\n' +
+    'let foldBackPartial = Option.foldBack<int<m>, int<s>> (fun value state -> state) (Some 2<s>)\nlet foldedBack = foldBackPartial 1<m>\n' +
+    'let anyFold = Option.fold\nlet anyFoldBack = Option.foldBack\n' +
+    'let foldBare = anyFold (fun (state: int<m>) (_: int<s>) -> state) 1<m> (Some 2<s>)\n' +
+    'let foldBackBare = anyFoldBack (fun (_: int<s>) (state: int<m>) -> state) (Some 3<s>) foldBare\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
         'ignore optionalPartial; ignore optionalDelayedPartial; ignore optionalBare; ignore optionalDelayedBare; ' +
-        'ignore iterationResult; ignore iterationPartial; ignore iterationBare; ignore iterationBareSeconds');
+        'ignore iterationResult; ignore iterationPartial; ignore iterationBare; ignore iterationBareSeconds; ' +
+        'ignore folded; ignore foldedBack; ignore foldBare; ignore foldBackBare');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
 const directCaptures = `module DirectCaptures
@@ -68,6 +74,9 @@ const cases = [
     ['iter argument dimension', 'CCS8040', 'let selected = «Option.iter (fun (_: int<m>) -> ()) (Some 1<s>)»'],
     ['iter nonoption input', 'CCS8003', 'let selected = «Option.iter (fun (_: int<m>) -> ()) 1<m>»'],
     ['iter nonfunction callback', 'CCS8003', 'let selected = «Option.iter 1<m>» None'],
+    ['fold callback state dimension', 'CCS8040', 'let selected = «Option.fold (fun (state: int<m>) (_: int<s>) -> state) 1<s>» None'],
+    ['foldBack callback payload dimension', 'CCS8040', 'let selected = «Option.foldBack (fun (_: int<s>) (state: int<m>) -> state) (Some 2<m>)» 1<m>'],
+    ['fold callback result dimension', 'CCS8040', 'let selected = «Option.fold (fun (state: int<m>) (_: int<s>) -> 1<s>)» 1<m> None'],
     ['fractional measure exponent', 'CCS8048', 'let selected = Option.defaultWith<float<«m^(1/2)»>>'],
     ['nonintegral inferred dimension', 'CCS8041', 'let selected = Option.defaultWith (fun () -> «Math.sqrt 2.0<m>») None'],
     ['intrinsic Math.sin dimension', 'CCS8040', 'let selected = «Math.sin 1.0<m>»']
@@ -226,6 +235,16 @@ async function run() {
             const result = await hover(name);
             assert.equal(result?.contents.value.split('\n')[0], name + ': ' + type);
             evidence.iterationHovers.push({ name, version, result });
+        }
+        evidence.foldHovers = [];
+        for (const [name, type] of [
+            ['folded', 'int<m>'], ['foldedBack', 'int<m>'],
+            ['foldPartial', 'int<s> option -> int<m>'], ['foldBackPartial', 'int<m> -> int<m>'],
+            ['foldBare', 'int<m>'], ['foldBackBare', 'int<m>']
+        ]) {
+            const result = await hover(name);
+            assert.equal(result?.contents.value.split('\n')[0], name + ': ' + type);
+            evidence.foldHovers.push({ name, version, result });
         }
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');

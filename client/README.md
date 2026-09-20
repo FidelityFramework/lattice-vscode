@@ -88,6 +88,9 @@ through direct, partial and bare-alias applications. Invalid option/thunk payloa
 thunk domains and partial applications retain their exact compiler diagnostics.
 `Option.iter` adds unit results, a measured partial-action signature and one bare
 alias used at two dimensions, with callback-result, dimension, input and callback-kind errors.
+`Option.fold` and `Option.foldBack` preserve independent state/payload dimensions,
+explicit type-argument order, their different partial signatures and bare aliases.
+Callback state, payload and result errors retain exact compiler codes and spans.
 The retained script name also covers direct immutable captures: declaration and
 reference hovers preserve the exact source arity, dimensions and returned-function
 result, with a captureless control. A wrong explicit argument requires CCS8040 at
