@@ -35,11 +35,12 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let resultErrorMapped = Result.mapError<int<m>, int<s>, int<kg>> (fun _ -> 1<kg>) (Error 2<s>)\n' +
     'let resultBound = Result.bind<int<m>, int<kg>, int<s>> (fun _ -> Ok 1<kg>) (Ok 2<m>)\n' +
     'let rangeLoop =\n    for index in (-2 .. 2) do ignore index\n    ()\n' +
+    'let loopCapture =\n    for index = 1 to 2 do\n        let visit = fun (value: int) -> ignore (index + value)\n        visit 0\n    ()\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
         'ignore optionalPartial; ignore optionalDelayedPartial; ignore optionalBare; ignore optionalDelayedBare; ' +
         'ignore iterationResult; ignore iterationPartial; ignore iterationBare; ignore iterationBareSeconds; ' +
         'ignore folded; ignore foldedBack; ignore foldBare; ignore foldBackBare; ' +
-        'ignore resultMapped; ignore resultErrorMapped; ignore resultBound; ignore rangeLoop');
+        'ignore resultMapped; ignore resultErrorMapped; ignore resultBound; ignore rangeLoop; ignore loopCapture');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
 const directCaptures = `module DirectCaptures
@@ -89,6 +90,8 @@ const cases = [
     ['range loop floating bound', 'CCS8003', 'let selected =\n    «for index in 0.0 .. 1 do ignore index»\n    ()'],
     ['range loop Boolean bound', 'CCS8003', 'let selected =\n    «for index in true .. 1 do ignore index»\n    ()'],
     ['range loop measured bound', 'CCS8040', 'let selected =\n    «for index in 1<m> .. 3 do ignore index»\n    ()'],
+    ['immutable loop counted assignment', 'CCS8009', 'let selected =\n    for index = 1 to 3 do\n        index <- «9»\n    ()'],
+    ['immutable loop range assignment', 'CCS8009', 'let selected =\n    for index in 1 .. 3 do\n        index <- «9»\n    ()'],
     ['fractional measure exponent', 'CCS8048', 'let selected = Option.defaultWith<float<«m^(1/2)»>>'],
     ['nonintegral inferred dimension', 'CCS8041', 'let selected = Option.defaultWith (fun () -> «Math.sqrt 2.0<m>») None'],
     ['intrinsic Math.sin dimension', 'CCS8040', 'let selected = «Math.sin 1.0<m>»']
@@ -158,6 +161,31 @@ async function run() {
     const hover = name => connection.sendRequest('textDocument/hover', {
         textDocument: { uri }, position: position(valid.slice(0, valid.indexOf('let ' + name + ' =') + 5))
     });
+    const loopCaptureHovers = async () => {
+        const lines = valid.split('\n');
+        const hoverAt = async (marker, name, reference) => {
+            const line = lines.findIndex(text => text.includes(marker));
+            assert.ok(line >= 0, marker);
+            const character = reference ? lines[line].lastIndexOf(name) : lines[line].indexOf(name);
+            return connection.sendRequest('textDocument/hover', { textDocument: { uri }, position: { line, character } });
+        };
+        const result = await hover('loopCapture');
+        const declared = await hoverAt('let visit', 'visit', false);
+        const used = await hoverAt('visit 0', 'visit', true);
+        const captured = await hoverAt('let visit', 'index', true);
+        assert.equal(result?.contents.value.split('\n')[0], 'loopCapture: unit');
+        assert.equal(declared?.contents.value.split('\n')[0], 'visit: int -> unit');
+        assert.equal(used?.contents.value.split('\n')[0], 'visit: int -> unit');
+        assert.equal(captured?.contents.value.split('\n')[0], 'index: int');
+        const captureLine = lines.findIndex(text => text.includes('let visit'));
+        const definition = await connection.sendRequest('textDocument/definition', {
+            textDocument: { uri }, position: { line: captureLine, character: lines[captureLine].lastIndexOf('index') }
+        });
+        const line = lines.findIndex(text => text.includes('for index = 1 to 2'));
+        const character = lines[line].indexOf('index');
+        assert.deepEqual(definition, { uri, range: { start: { line, character }, end: { line, character: character + 'index'.length } } });
+        return { version, result, declared, used, captured, definition };
+    };
     const captureHovers = async () => {
         const lines = directCaptures.split('\n');
         const checks = [];
@@ -279,6 +307,8 @@ async function run() {
         });
         assert.equal(inductionHover?.contents.value.split('\n')[0], 'index: int');
         evidence.rangeLoopHovers = { version, result: rangeHover, induction: inductionHover };
+        evidence.loopCapture = await loopCaptureHovers();
+        evidence.loopCaptureRepairs = [];
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');
             const finish = markedBody.indexOf('»');
@@ -310,6 +340,10 @@ async function run() {
             noErrors(await change(valid));
             assert.match((await hover('selected'))?.contents.value ?? '', /selected: int<m>/,
                 name + ': unsaved correction restores the measured hover');
+            if (name.startsWith('immutable loop')) {
+                assert.match(errors[0].message, /not found or not mutable/);
+                evidence.loopCaptureRepairs.push(await loopCaptureHovers());
+            }
             console.log('PASS: ' + name + ' and unsaved correction');
         }
         noErrors(await change(directCaptures));

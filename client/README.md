@@ -98,6 +98,10 @@ bind callback that changes the shared error dimension.
 Simple parenthesized integer ranges retain unit results and `int` induction
 hovers. Floating, Boolean and measured bounds require the compiler's exact
 CCS8003/CCS8040 loop spans.
+Capturing an iteration value retains an `int -> unit` source signature and resolves
+the captured reference to the source loop identifier. Assigning to counted/range
+iteration bindings requires CCS8009 at the assigned value; repair restores both
+the signature and go-to-definition result.
 The retained script name also covers direct immutable captures: declaration and
 reference hovers preserve the exact source arity, dimensions and returned-function
 result, with a captureless control. A wrong explicit argument requires CCS8040 at
@@ -107,7 +111,7 @@ Local module and record definitions of `Math.sin` preserve `int<m>` result hover
 unsaved replacements clear an intrinsic dimensional error checked as CCS8040 at
 the exact full application span.
 Unsaved negative cases must preserve CCS's effective error severity, exact source
-span and existing codes (`CCS8003`, `CCS8004`, `CCS8040`, `CCS8041`, `CCS8048`);
+span and existing codes (`CCS8003`, `CCS8004`, `CCS8009`, `CCS8040`, `CCS8041`, `CCS8048`);
 corrections must clear the error at the new document version. It records all server
 assembly hashes and diagnostic publications in a temporary evidence directory.
 This gate does not build the compiler, need a platform dependency, or dispatch a
