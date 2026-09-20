@@ -145,6 +145,33 @@ captured lambda/lazy values. Sequence and callable hovers retain measured types,
 and captured reads navigate to their original declarations. `SequenceEvaluation`
 hyperedges and backedges are asserted in CCS graph tests, not reconstructed by
 the client; these checks do not establish native suspension behavior.
+The C-06 continuation cases preserve definitions of immutable and mutable
+bindings declared within an outer sequence and captured by an inner sequence.
+Ascending and descending counted sequence bodies project `seq<int>` and their
+source induction definitions. Sequence consumption projects its measured element
+type; a scalar input requires CCS8003 at the whole loop. Repair restores the
+sequence, element and definition projections through the server.
+The complete 2026-09-20 stdio gate passed **50 diagnostic edits and repairs** on
+CCS SHA-256 `08d547524f7c76f61bb82e4a67e2f04ffe64b6ca37da7637ba2c4b2c07384482`,
+with evidence at `/tmp/lattice-surface-waypoint-gTl1Dg/result.json` and normal
+server exit. Composer's separate `15a_SequenceSemantics` native oracle passed on
+the final native `f4bbc287…432c1a` assembly; evidence:
+`/tmp/composer-native-sequences-d001fa03098148f8a94fb2fdf37454e2/evidence.json`.
+The source admission gate prevents
+target frame synthesis from adding runtime errors to already rejected source.
+The stdio result does not claim an extension-host UI run,
+completion support or blanket discharge of continuation obligations.
+The later captured-template residence extension passes the separate
+`15c_SequenceTemplateBorrows` native oracle on CCS
+`f4bbc2879280b8252e3c7424a1b399e981eb492e49b07fb1def617d45f432c1a`.
+The compiler implementation is
+[`12aa78d2b`](https://github.com/FidelityFramework/clef/commit/12aa78d2b).
+Editor/server artifacts were refreshed to this assembly; the unchanged source
+projection fixtures retain their tested `08d54752…84482` evidence rather than
+claiming another run. C-06 remains an implementation waypoint: the broader
+`08d54752…84482` FidelityHello run compiled 23/28 samples and ran all 23
+successfully, with five separate compilation failures still recorded in
+[Composer's gate record](../../Composer/docs/Language_Coverage_Waypoints.md).
 The retained script name also covers direct immutable captures: declaration and
 reference hovers preserve the exact source arity, dimensions and returned-function
 result, with a captureless control. A wrong explicit argument requires CCS8040 at

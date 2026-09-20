@@ -65,6 +65,12 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let deferredSequence =\n    let evaluationSeed = 4<m>\n    seq {\n' +
     '        let sample = fun () -> evaluationSeed\n        let delayedValue = lazy (evaluationSeed)\n' +
     '        yield sample ()\n        yield Lazy.force delayedValue\n    }\n' +
+    'let nestedLocalSequence = seq {\n    let localSeed = 1<m>\n    let mutable localFlag = true\n' +
+    '    let localChild = seq {\n        yield localSeed\n        if localFlag then yield localSeed\n    }\n' +
+    '    yield! localChild\n}\n' +
+    'let countedSequence = seq {\n    for ascending in 1 .. 2 do\n        yield ascending\n' +
+    '    for descending = 2 downto 1 do\n        yield descending\n}\n' +
+    'let consumedSequence =\n    for item in seq { yield 1<m> } do\n        ignore item\n    ()\n' +
     'let rangeLoop =\n    for index in (-2 .. 2) do ignore index\n    ()\n' +
     'let loopCapture =\n    for index = 1 to 2 do\n        let visit = fun (value: int) -> ignore (index + value)\n        visit 0\n    ()\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
@@ -77,6 +83,7 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
         'ignore mappedSequence; ignore collectedSequence; ignore guardedSequence; ignore effectOnlySequence; ' +
         'ignore effectfulDelegation; ignore nestedDelegation; ' +
         'ignore loopingSequence; ignore deferredSequence; ' +
+        'ignore nestedLocalSequence; ignore countedSequence; ignore consumedSequence; ' +
         'ignore rangeLoop; ignore loopCapture');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
@@ -142,6 +149,7 @@ const cases = [
     ['Sequence mixed yield dimensions', 'CCS8040', 'let selected = seq { yield 1<m>; «yield 2<s>» }'],
     ['Sequence scalar delegation', 'CCS8003', 'let selected = seq { «yield! 1» }'],
     ['Sequence conflicting delegations', 'CCS8040', 'let selected = seq { yield! seq { yield 1<m> }; «yield! seq { yield 2<s> }» }'],
+    ['Sequence consumption scalar input', 'CCS8003', 'let selected =\n    «for item in 1 do ()»\n    ()'],
     ['Seq producer callback dimension', 'CCS8040', 'let selected = «Seq.map (fun (value: int<m>) -> value) (seq { yield 1<s> })»'],
     ['Seq producer delegation dimension', 'CCS8040', 'let selected = seq { yield 1<m>; «yield! Seq.append (seq { yield 2<s> }) (seq { yield 3<s> })» }'],
     ['fractional measure exponent', 'CCS8048', 'let selected = Option.defaultWith<float<«m^(1/2)»>>'],
@@ -432,6 +440,64 @@ async function run() {
         }
         return { version, results, loop, declaredSample, calledSample, captures };
     };
+    const sequenceContinuationHovers = async () => {
+        const lines = valid.split('\n');
+        const at = (marker, token) => {
+            const line = lines.findIndex(text => text.includes(marker));
+            assert.ok(line >= 0, marker);
+            const character = lines[line].indexOf(token);
+            assert.ok(character >= 0, token);
+            return { line, character };
+        };
+        const hoverAt = (marker, token) => connection.sendRequest('textDocument/hover', {
+            textDocument: { uri }, position: at(marker, token)
+        });
+        const results = [];
+        for (const [binding, type] of [
+            ['nestedLocalSequence', 'seq<int<m>>'], ['countedSequence', 'seq<int>'], ['consumedSequence', 'unit']
+        ]) {
+            const result = await hover(binding);
+            assert.equal(result?.contents.value.split('\n')[0], binding + ': ' + type);
+            results.push({ binding, result });
+        }
+        const child = await hoverAt('let localChild', 'localChild');
+        assert.equal(child?.contents.value.split('\n')[0], 'localChild: seq<int<m>>');
+        const captures = [];
+        for (const [token, type, declarationMarker, uses] of [
+            ['localSeed', 'int<m>', 'let localSeed', ['yield localSeed', 'if localFlag']],
+            ['localFlag', 'bool', 'let mutable localFlag', ['if localFlag']]
+        ]) {
+            const declaration = await hoverAt(declarationMarker, token);
+            assert.equal(declaration?.contents.value.split('\n')[0], token + ': ' + type);
+            for (const marker of uses) {
+                const result = await hoverAt(marker, token);
+                assert.equal(result?.contents.value.split('\n')[0], token + ': ' + type);
+                const definition = await connection.sendRequest('textDocument/definition', {
+                    textDocument: { uri }, position: at(marker, token)
+                });
+                assert.deepEqual(definition, { uri, range: declaration.range });
+                captures.push({ token, marker, result, definition });
+            }
+        }
+        const induction = [];
+        for (const [token, declarationMarker, useMarker, type] of [
+            ['ascending', 'for ascending', 'yield ascending', 'int'],
+            ['descending', 'for descending', 'yield descending', 'int'],
+            ['item', 'for item in seq', 'ignore item', 'int<m>']
+        ]) {
+            const result = await hoverAt(useMarker, token);
+            assert.equal(result?.contents.value.split('\n')[0], token + ': ' + type);
+            const start = at(declarationMarker, token);
+            const definition = await connection.sendRequest('textDocument/definition', {
+                textDocument: { uri }, position: at(useMarker, token)
+            });
+            assert.deepEqual(definition, { uri, range: {
+                start, end: { line: start.line, character: start.character + token.length }
+            } });
+            induction.push({ token, result, definition });
+        }
+        return { version, results, child, captures, induction };
+    };
     const loopCaptureHovers = async () => {
         const lines = valid.split('\n');
         const hoverAt = async (marker, name, reference) => {
@@ -597,6 +663,8 @@ async function run() {
         evidence.sequenceOwnershipRepairs = [];
         evidence.delegation = await delegationHovers();
         evidence.sequenceEvaluation = await sequenceEvaluationHovers();
+        evidence.sequenceContinuation = await sequenceContinuationHovers();
+        evidence.sequenceContinuationRepairs = [];
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');
             const finish = markedBody.indexOf('»');
@@ -637,6 +705,8 @@ async function run() {
                     evidence.sequenceOwnershipRepairs.push(await sequenceOwnershipHovers());
             }
             if (name.startsWith('Sequence ')) evidence.sequenceRepairs.push(await nestedSequenceHovers());
+            if (name === 'Sequence consumption scalar input')
+                evidence.sequenceContinuationRepairs.push(await sequenceContinuationHovers());
             if (name.startsWith('Seq producer ')) evidence.sequenceProducerRepairs.push(await sequenceProducerHovers());
             if (name.startsWith('Result.default') || name.startsWith('Result.iter') || name.startsWith('Result.is')) {
                 const operation = name.split(' ')[0];
