@@ -95,6 +95,11 @@ Callback state, payload and result errors retain exact compiler codes and spans.
 with exact two-argument Result hovers and a stored mapping signature.
 Three exact CCS8040 cases reject mismatched success/error callback inputs and a
 bind callback that changes the shared error dimension.
+Result defaults keep success and error dimensions independent. `defaultWith`
+receives the error payload, with both Result arguments visible in its partial
+signature; `Result.iter` returns unit after a measured action.
+Fallback/callback dimension errors and nonunit actions retain exact CCS8040 or
+CCS8003 spans; repair restores the corresponding Result projection.
 Simple parenthesized integer ranges retain unit results and `int` induction
 hovers. Floating, Boolean and measured bounds require the compiler's exact
 CCS8003/CCS8040 loop spans.

@@ -34,13 +34,17 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let resultMapPartial = Result.map<int<m>, int<kg>, int<s>> (fun _ -> 1<kg>)\nlet resultMapped = resultMapPartial (Ok 2<m>)\n' +
     'let resultErrorMapped = Result.mapError<int<m>, int<s>, int<kg>> (fun _ -> 1<kg>) (Error 2<s>)\n' +
     'let resultBound = Result.bind<int<m>, int<kg>, int<s>> (fun _ -> Ok 1<kg>) (Ok 2<m>)\n' +
+    'let resultDefaulted = Result.defaultValue<int<m>, int<s>> 1<m> (Error 2<s>)\n' +
+    'let resultRecover = Result.defaultWith<int<m>, int<s>> (fun error -> error * 1<m> / 1<s>)\nlet resultRecovered = resultRecover (Error 2<s>)\n' +
+    'let resultIterated = Result.iter<int<m>, int<s>> (fun value -> ignore value) (Ok 2<m>)\n' +
     'let rangeLoop =\n    for index in (-2 .. 2) do ignore index\n    ()\n' +
     'let loopCapture =\n    for index = 1 to 2 do\n        let visit = fun (value: int) -> ignore (index + value)\n        visit 0\n    ()\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
         'ignore optionalPartial; ignore optionalDelayedPartial; ignore optionalBare; ignore optionalDelayedBare; ' +
         'ignore iterationResult; ignore iterationPartial; ignore iterationBare; ignore iterationBareSeconds; ' +
         'ignore folded; ignore foldedBack; ignore foldBare; ignore foldBackBare; ' +
-        'ignore resultMapped; ignore resultErrorMapped; ignore resultBound; ignore rangeLoop; ignore loopCapture');
+        'ignore resultMapped; ignore resultErrorMapped; ignore resultBound; ' +
+        'ignore resultDefaulted; ignore resultRecovered; ignore resultIterated; ignore rangeLoop; ignore loopCapture');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
 const directCaptures = `module DirectCaptures
@@ -87,6 +91,9 @@ const cases = [
     ['Result.map success dimension', 'CCS8040', 'let selected = «Result.map (fun (_: int<m>) -> true) (Ok 2<s>: Result<int<s>, bool>)»'],
     ['Result.mapError error dimension', 'CCS8040', 'let selected = «Result.mapError (fun (_: int<m>) -> true) (Error 2<s>: Result<bool, int<s>>)»'],
     ['Result.bind shared error dimension', 'CCS8040', 'let selected = «Result.bind (fun (_: bool) -> (Error 3<m>: Result<bool, int<m>>)) (Error 2<s>: Result<bool, int<s>>)»'],
+    ['Result.defaultValue fallback dimension', 'CCS8040', 'let selected = «Result.defaultValue 1<m> (Ok 2<s>: Result<int<s>, bool>)»'],
+    ['Result.defaultWith error callback dimension', 'CCS8040', 'let selected = «Result.defaultWith (fun (_: int<s>) -> 1<m>) (Error 2<m>: Result<int<m>, int<m>>)»'],
+    ['Result.iter nonunit action', 'CCS8003', 'let selected = «Result.iter (fun (_: bool) -> 3)» (Ok true: Result<bool, bool>)'],
     ['range loop floating bound', 'CCS8003', 'let selected =\n    «for index in 0.0 .. 1 do ignore index»\n    ()'],
     ['range loop Boolean bound', 'CCS8003', 'let selected =\n    «for index in true .. 1 do ignore index»\n    ()'],
     ['range loop measured bound', 'CCS8040', 'let selected =\n    «for index in 1<m> .. 3 do ignore index»\n    ()'],
@@ -291,7 +298,9 @@ async function run() {
             ['resultMapped', 'Result<int<kg>, int<s>>'],
             ['resultErrorMapped', 'Result<int<m>, int<kg>>'],
             ['resultBound', 'Result<int<kg>, int<s>>'],
-            ['resultMapPartial', 'Result<int<m>, int<s>> -> Result<int<kg>, int<s>>']
+            ['resultMapPartial', 'Result<int<m>, int<s>> -> Result<int<kg>, int<s>>'],
+            ['resultDefaulted', 'int<m>'], ['resultRecovered', 'int<m>'], ['resultIterated', 'unit'],
+            ['resultRecover', 'Result<int<m>, int<s>> -> int<m>']
         ]) {
             const result = await hover(name);
             assert.equal(result?.contents.value.split('\n')[0], name + ': ' + type);
@@ -340,6 +349,16 @@ async function run() {
             noErrors(await change(valid));
             assert.match((await hover('selected'))?.contents.value ?? '', /selected: int<m>/,
                 name + ': unsaved correction restores the measured hover');
+            if (name.startsWith('Result.default') || name.startsWith('Result.iter')) {
+                const operation = name.split(' ')[0];
+                const [binding, type] = {
+                    'Result.defaultValue': ['resultDefaulted', 'int<m>'],
+                    'Result.defaultWith': ['resultRecover', 'Result<int<m>, int<s>> -> int<m>'],
+                    'Result.iter': ['resultIterated', 'unit']
+                }[operation];
+                assert.equal((await hover(binding))?.contents.value.split('\n')[0], binding + ': ' + type,
+                    operation + ': unsaved repair restores the Result projection');
+            }
             if (name.startsWith('immutable loop')) {
                 assert.match(errors[0].message, /not found or not mutable/);
                 evidence.loopCaptureRepairs.push(await loopCaptureHovers());
