@@ -120,6 +120,10 @@ Nested sequence owners project independent `seq<int<m>>` and `seq<bool>` types.
 Mixed yields, scalar delegation and incompatible yield!-only delegations retain
 exact CCS8040/CCS8003 form spans; repairs restore both owner hovers. This adds no
 sequence-runtime claim.
+A sequence capturing a local measured seed retains its source `seq<int<m>>`
+expression hover and `unit -> seq<int<m>>` factory signature. Go-to-definition
+from the captured seed returns its original declaration; an internal generator
+formal cannot replace the source sequence hover.
 The retained script name also covers direct immutable captures: declaration and
 reference hovers preserve the exact source arity, dimensions and returned-function
 result, with a captureless control. A wrong explicit argument requires CCS8040 at

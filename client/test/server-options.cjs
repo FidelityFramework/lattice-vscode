@@ -41,6 +41,7 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let resultIsErrorPredicate = Result.isError<int<s>, int<m>>\nlet resultIsError = resultIsErrorPredicate (Error 2<m>)\n' +
     'let nativeSequence = seq { yield 1<m> }\n' +
     'let nestedSequence = seq {\n    let inner = seq { yield true }\n    yield 1<m>\n}\n' +
+    'let makeSequence () =\n    let seed = 1<m>\n    seq { yield seed }\nlet capturedSequence = makeSequence ()\n' +
     'let rangeLoop =\n    for index in (-2 .. 2) do ignore index\n    ()\n' +
     'let loopCapture =\n    for index = 1 to 2 do\n        let visit = fun (value: int) -> ignore (index + value)\n        visit 0\n    ()\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
@@ -49,7 +50,7 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
         'ignore folded; ignore foldedBack; ignore foldBare; ignore foldBackBare; ' +
         'ignore resultMapped; ignore resultErrorMapped; ignore resultBound; ' +
         'ignore resultDefaulted; ignore resultRecovered; ignore resultIterated; ignore resultIsOk; ignore resultIsError; ' +
-        'ignore nativeSequence; ignore nestedSequence; ignore rangeLoop; ignore loopCapture');
+        'ignore nativeSequence; ignore nestedSequence; ignore capturedSequence; ignore rangeLoop; ignore loopCapture');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
 const directCaptures = `module DirectCaptures
@@ -182,6 +183,34 @@ async function run() {
     const hover = name => connection.sendRequest('textDocument/hover', {
         textDocument: { uri }, position: position(valid.slice(0, valid.indexOf('let ' + name + ' =') + 5))
     });
+    const capturedSequenceHovers = async () => {
+        const lines = valid.split('\n');
+        const at = (marker, token) => {
+            const line = lines.findIndex(text => text.includes(marker));
+            assert.ok(line >= 0, marker);
+            return { line, character: lines[line].indexOf(token) };
+        };
+        const hoverAt = (marker, token) => connection.sendRequest('textDocument/hover', {
+            textDocument: { uri }, position: at(marker, token)
+        });
+        const factory = await hoverAt('let makeSequence', 'makeSequence');
+        const result = await hover('capturedSequence');
+        const expression = await hoverAt('seq { yield seed }', 'seq');
+        const declaration = await hoverAt('let seed', 'seed');
+        const captured = await hoverAt('seq { yield seed }', 'seed');
+        assert.equal(factory?.contents.value.split('\n')[0], 'makeSequence: unit -> seq<int<m>>');
+        assert.equal(result?.contents.value.split('\n')[0], 'capturedSequence: seq<int<m>>');
+        assert.equal(expression?.contents.value.split('\n')[0], 'seq<int<m>>',
+            'The internal generator formal must not occupy the source seq token.');
+        assert.equal(declaration?.contents.value.split('\n')[0], 'seed: int<m>');
+        assert.equal(captured?.contents.value.split('\n')[0], 'seed: int<m>');
+        assert.equal(declaration.range.start.line, at('let seed', 'seed').line);
+        const definition = await connection.sendRequest('textDocument/definition', {
+            textDocument: { uri }, position: at('seq { yield seed }', 'seed')
+        });
+        assert.deepEqual(definition, { uri, range: declaration.range });
+        return { version, factory, result, expression, declaration, captured, definition };
+    };
     const nestedSequenceHovers = async () => {
         const outer = await hover('nestedSequence');
         const lines = valid.split('\n');
@@ -351,6 +380,7 @@ async function run() {
         assert.equal(evidence.nativeSequence?.contents.value.split('\n')[0], 'nativeSequence: seq<int<m>>');
         evidence.ceRepairs = [];
         evidence.nestedSequence = await nestedSequenceHovers();
+        evidence.capturedSequence = await capturedSequenceHovers();
         evidence.sequenceRepairs = [];
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');
