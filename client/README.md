@@ -112,6 +112,10 @@ out-of-owner lambda yields and lexical `seq` shadowing. Their exact AST spans
 and repairs to ordinary `Result.iter` or native `seq` are checked through CCS.
 The sequence check establishes source admission, not sequence execution or
 completed sequence frames; it introduces no general builder support.
+Nested sequence owners project independent `seq<int<m>>` and `seq<bool>` types.
+Mixed yields, scalar delegation and incompatible yield!-only delegations retain
+exact CCS8040/CCS8003 form spans; repairs restore both owner hovers. This adds no
+sequence-runtime claim.
 The retained script name also covers direct immutable captures: declaration and
 reference hovers preserve the exact source arity, dimensions and returned-function
 result, with a captureless control. A wrong explicit argument requires CCS8040 at

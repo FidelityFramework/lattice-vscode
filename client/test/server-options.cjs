@@ -38,6 +38,7 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
     'let resultRecover = Result.defaultWith<int<m>, int<s>> (fun error -> error * 1<m> / 1<s>)\nlet resultRecovered = resultRecover (Error 2<s>)\n' +
     'let resultIterated = Result.iter<int<m>, int<s>> (fun value -> ignore value) (Ok 2<m>)\n' +
     'let nativeSequence = seq { yield 1<m> }\n' +
+    'let nestedSequence = seq {\n    let inner = seq { yield true }\n    yield 1<m>\n}\n' +
     'let rangeLoop =\n    for index in (-2 .. 2) do ignore index\n    ()\n' +
     'let loopCapture =\n    for index = 1 to 2 do\n        let visit = fun (value: int) -> ignore (index + value)\n        visit 0\n    ()\n' +
     entry.replace('ignore selected', 'ignore selected; ignore delayed; ignore optionalEager; ignore optionalDeferred; ' +
@@ -45,7 +46,7 @@ const valid = prelude + 'let choose = Option.defaultValue 1<m>\nlet selected = c
         'ignore iterationResult; ignore iterationPartial; ignore iterationBare; ignore iterationBareSeconds; ' +
         'ignore folded; ignore foldedBack; ignore foldBare; ignore foldBackBare; ' +
         'ignore resultMapped; ignore resultErrorMapped; ignore resultBound; ' +
-        'ignore resultDefaulted; ignore resultRecovered; ignore resultIterated; ignore nativeSequence; ignore rangeLoop; ignore loopCapture');
+        'ignore resultDefaulted; ignore resultRecovered; ignore resultIterated; ignore nativeSequence; ignore nestedSequence; ignore rangeLoop; ignore loopCapture');
 // Same source contract as Composer/tests/CCS.Editor.Tests/Program.fs. Hidden
 // capture parameters must never appear in source declaration/reference hover.
 const directCaptures = `module DirectCaptures
@@ -104,6 +105,9 @@ const cases = [
     ['CE seq let bang', 'CCS8401', 'let selected = seq {\n    «let! value = true\n    yield value»\n}'],
     ['CE seq lambda yield', 'CCS8401', 'let selected = seq {\n    let work = fun () -> «yield 1»\n    yield 2\n}'],
     ['CE lexical seq', 'CCS8401', 'let seq value = not value\nlet selected = seq «{ yield true }»'],
+    ['Sequence mixed yield dimensions', 'CCS8040', 'let selected = seq { yield 1<m>; «yield 2<s>» }'],
+    ['Sequence scalar delegation', 'CCS8003', 'let selected = seq { «yield! 1» }'],
+    ['Sequence conflicting delegations', 'CCS8040', 'let selected = seq { yield! seq { yield 1<m> }; «yield! seq { yield 2<s> }» }'],
     ['fractional measure exponent', 'CCS8048', 'let selected = Option.defaultWith<float<«m^(1/2)»>>'],
     ['nonintegral inferred dimension', 'CCS8041', 'let selected = Option.defaultWith (fun () -> «Math.sqrt 2.0<m>») None'],
     ['intrinsic Math.sin dimension', 'CCS8040', 'let selected = «Math.sin 1.0<m>»']
@@ -173,6 +177,18 @@ async function run() {
     const hover = name => connection.sendRequest('textDocument/hover', {
         textDocument: { uri }, position: position(valid.slice(0, valid.indexOf('let ' + name + ' =') + 5))
     });
+    const nestedSequenceHovers = async () => {
+        const outer = await hover('nestedSequence');
+        const lines = valid.split('\n');
+        const line = lines.findIndex(text => text.includes('let inner = seq'));
+        assert.ok(line >= 0);
+        const inner = await connection.sendRequest('textDocument/hover', {
+            textDocument: { uri }, position: { line, character: lines[line].indexOf('inner') }
+        });
+        assert.equal(outer?.contents.value.split('\n')[0], 'nestedSequence: seq<int<m>>');
+        assert.equal(inner?.contents.value.split('\n')[0], 'inner: seq<bool>');
+        return { version, outer, inner };
+    };
     const loopCaptureHovers = async () => {
         const lines = valid.split('\n');
         const hoverAt = async (marker, name, reference) => {
@@ -326,6 +342,8 @@ async function run() {
         evidence.nativeSequence = await hover('nativeSequence');
         assert.equal(evidence.nativeSequence?.contents.value.split('\n')[0], 'nativeSequence: seq<int<m>>');
         evidence.ceRepairs = [];
+        evidence.nestedSequence = await nestedSequenceHovers();
+        evidence.sequenceRepairs = [];
         for (const [name, code, markedBody] of cases) {
             const start = markedBody.indexOf('«');
             const finish = markedBody.indexOf('»');
@@ -363,6 +381,7 @@ async function run() {
                 assert.equal(result?.contents.value.split('\n')[0], binding + ': ' + type);
                 evidence.ceRepairs.push({ name, version, result });
             }
+            if (name.startsWith('Sequence ')) evidence.sequenceRepairs.push(await nestedSequenceHovers());
             if (name.startsWith('Result.default') || name.startsWith('Result.iter')) {
                 const operation = name.split(' ')[0];
                 const [binding, type] = {
