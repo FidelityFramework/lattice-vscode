@@ -62,6 +62,13 @@ Arguments pass directly without shell expansion. An empty command disables start
 
 Current scope is one trusted local workspace with file-backed `.clef` documents. The server watches the check's source and manifest inputs, including external platform/library files. Edits invalidate proof evidence. `.clefx`, untitled documents, multiple projects, completion and native build/debug commands need further integration.
 
+The planned interactive CLI is `clefx`, matching the `.clefx` script extension.
+Composer's [workbench plan](../../Composer/docs/Interactive_Compiler_Workbench.md)
+owns the shared compiler/proof service and native LLVM execution bridge. The
+client will present versioned results through that service. SageFS/FSI is a
+candidate bootstrap host for the F# compiler implementation, not a Clef evaluator;
+shared sessions and send-to-`clefx` support remain planned.
+
 With the validated compiler integration, commenting out `open HelloDimensionsProof.Units` reports CCS8009 at `speed` and removes its resolved hover/definition. Restoring the import restores both. Removing and restoring the declaration itself is also covered. These results come from CCS module visibility and graph references.
 
 **Proved · source** means cvc5 decided the compiler's negated obligation under its encoded premises. The sample's string and buffer obligations do not prove the measured calculation or preservation through native/JavaScript lowering. Syntax failures currently appear in Lattice output and as a failed-check message in the panel; precise parser diagnostic ranges remain work in CCS.
